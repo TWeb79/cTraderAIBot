@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: 58-cTraderAnthropicBot-api
+    ports:
+      - "8158:8158"
+    volumes:
+      - ./config:/app/config:ro
+      - ./.env:/app/.env:ro
+      - ./data:/app/data
+    environment:
+      - CTRADER_MCP_URL=http://host.docker.internal:9876/mcp/
+    restart: unless-stopped
+    networks:
+      - 58-project
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: 58-cTraderAnthropicBot-web
+    ports:
+      - "8058:8058"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - 58-project
+
+networks:
+  58-project:
+    driver: bridge

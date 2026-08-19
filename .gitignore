@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+src/ctrader_bot.egg-info/
+
+.env
+*.db
+*.db-journal
+data/cache/*
+!data/cache/.gitkeep
+!data/cache/.kill_switch
+reports/*
+!reports/.gitkeep
+
+.DS_Store
+.idea/
+.vscode/
+
+# Node / build
+node_modules/
+dist/
+build/
+

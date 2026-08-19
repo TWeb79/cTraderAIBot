@@ -1,0 +1,19 @@
+FROM debian:12-slim
+
+LABEL maintainer="Inventions4All - github:TWeb79"
+LABEL description="cTrader Anthropic Bot - Dashboard (Project 58)"
+LABEL version="0.1.0"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY dashboard/ ./dashboard/
+
+EXPOSE 8058
+
+CMD ["python3", "-m", "http.server", "8058", "--directory", "dashboard"]
