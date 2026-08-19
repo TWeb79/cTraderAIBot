@@ -305,6 +305,38 @@ async def simulate(days: int = 30, symbol: str | None = None,
     return df, failure_report
 
 
+def append_simulated_to_registry(df: pd.DataFrame, registry_path: str | None = None) -> int:
+    """Feed simulated trade outcomes into the parameter registry as feedback.
+
+    This is the 'train on simulated trades' step: it lets the optimizer/retrain
+    blend historical simulation performance into future scoring. Append-only.
+    """
+    if df is None or df.empty:
+        return 0
+    from ctrader_bot.training.registry import ParameterRegistry
+
+    registry = ParameterRegistry(registry_path)
+    n = 0
+    for _, row in df.iterrows():
+        entry = float(row.get("entry_price") or 0.0)
+        stop = float(row.get("stop_price") or 0.0)
+        volume = float(row.get("volume") or 1.0)
+        pnl = float(row.get("pnl") or 0.0)
+        denom = abs(entry - stop) * volume
+        r_multiple = pnl / denom if denom > 0 else 0.0
+        registry.append_live_feedback({
+            "setup_tag": str(row.get("setup_tag", "simulated")),
+            "regime": str(row.get("regime", "UNKNOWN")),
+            "r_multiple": r_multiple,
+            "pnl": pnl,
+            "entry_price": entry,
+            "atr": float(row.get("atr") or 0.0),
+            "timestamp": str(row.get("entry_time", "")),
+        })
+        n += 1
+    return n
+
+
 def main() -> None:
     import argparse
     parser = argparse.ArgumentParser(description="Simulated trading engine with failure analysis")

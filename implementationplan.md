@@ -6,6 +6,26 @@
 
 ---
 
+## 0. Notes to be transformed into actions
+- update the implementationplan.md and clean everything which has been resolved, then add the new pending items and add this to the plan: 
+- the volume profile should be calculated based on the session. so pre-NY-market and then a dedicated volume profile for the NY session. the volume profile, poc, val, vah as well as day-close-price and ny-open-price should all be additional specific datapoints for the training. 
+
+- also add a legend to the chart which shows the prices and the times.
+
+- you can add a dedicated section in the dashboard with the core datapoints and time. 
+
+- add also a visualization of the trained model or neuronal network so that it is kind of visible that the ai is learning, thinking and so on. decide on the best visualization for this.
+
+- the training on simulated trades should work with real historic bars and take autonomous trading descisions to learn from them. these trades should only be calculated without sending real trades to the mcp.
+
+- update the docker image and the documentation once done
+
+- I would like to add a training feature to the dashboard where i can initiate training on old historical data and  afterwards train on simulated trades.
+
+- the chart should be scrollable and zoomable and be switchable to orderflow visualization. adfditionally the asia, frankfurt and ny exchange open and close should be shown.
+
+- different trading strategies to be activated when switching on auto mode for trading. the system then analyzses based on the selected strategy and the trained data to calculate a likelyhood of long or short and the estimated TP and SL. for the next 5min.
+
 ## 1. Current State Assessment
 
 ### 1.1 Mixed Concepts Identified

@@ -1,0 +1,52 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - generic [ref=f2e5]: Cockpit
+      - generic [ref=f2e6]: v0.1.0
+    - generic [ref=f2e7]:
+      - generic [ref=f2e8]: MCP LINK
+      - generic [ref=f2e10]: MODEL RDY
+      - generic [ref=f2e12]: RISK GATE
+      - generic [ref=f2e14]: AUTOPILOT OFF
+    - generic [ref=f2e16]:
+      - generic [ref=f2e17]:
+        - generic [ref=f2e18]: DAILY P&L
+        - generic [ref=f2e19]: +0.00%
+      - generic [ref=f2e20]:
+        - generic [ref=f2e21]: EQUITY
+        - generic [ref=f2e22]: "912.44"
+      - button "Open feature tour" [ref=f2e23] [cursor=pointer]: "?"
+  - main [ref=f2e24]:
+    - generic [ref=f2e25]:
+      - generic [ref=f2e27]:
+        - heading "US500" [level=1] [ref=f2e28]
+        - generic [ref=f2e29]: M5
+        - generic [ref=f2e30]: VOL PROFILE · APPROX (TICK VOL)
+      - complementary [ref=f2e163]:
+        - generic [ref=f2e164]:
+          - heading "Currency strength" [level=2] [ref=f2e165]
+          - paragraph [ref=f2e166]: watchlist breadth, not exchange-wide
+        - generic [ref=f2e167]:
+          - heading "Signal feed" [level=2] [ref=f2e168]
+          - paragraph [ref=f2e169]: strategy decisions + gate outcome
+        - generic [ref=f2e170]:
+          - heading "Open position" [level=2] [ref=f2e171]
+          - generic [ref=f2e172]: No open position
+    - generic [ref=f2e173]:
+      - heading "Trade journal" [level=2] [ref=f2e174]
+      - table [ref=f2e175]:
+        - rowgroup [ref=f2e176]:
+          - row [ref=f2e177]:
+            - columnheader "Closed" [ref=f2e178]
+            - columnheader "Setup" [ref=f2e179]
+            - columnheader "Outcome" [ref=f2e180]
+            - columnheader "R" [ref=f2e181]
+            - columnheader "Lesson" [ref=f2e182]
+        - rowgroup [ref=f2e183]:
+          - row [ref=f2e184]:
+            - cell "No trades yet" [ref=f2e185]
+  - contentinfo [ref=f2e186]:
+    - generic [ref=f2e187]:
+      - text: All data is for demonstration. Wire to
+      - code [ref=f2e188]: http://localhost:8158
+      - text: for live data.
