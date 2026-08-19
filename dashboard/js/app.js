@@ -4,7 +4,7 @@
  * sidebar/training panels together.
  */
 
-import { fetchVersion, fetchJournal, fetchBars, createWebSocket } from './api.js';
+import { fetchVersion, fetchJournal, fetchBars, createWebSocket, closePosition } from './api.js';
 import { renderChart, setChartMode, resetChartView } from './chart.js';
 import { initAutoControls, initSessionClock, renderDatapoints, renderLearningGauge, refreshLearningSparkline } from './panels.js';
 import { initTrainingPanel, handleTrainingBroadcast } from './training.js';
@@ -47,22 +47,47 @@ function renderSignals(container, signals) {
 
 function renderPosition(container, positions) {
   if (!positions || !positions.length) {
-    container.innerHTML = '<span style="color:var(--text-faint)">No open position</span>';
+    container.innerHTML = '<span style="color:var(--text-faint)">No open positions</span>';
     return;
   }
-  const p = positions[0];
-  const pnl = p.pnl || 0;
-  container.innerHTML = `
-    <div class="position__row"><span>${p.symbol || 'US500'} · ${(p.side || 'BUY').toUpperCase()} · ${p.volume || 0} lots</span></div>
-    <div class="position__row">
-      <span style="color:var(--text-faint)">entry ${(p.entryPrice || p.entry_price || 0).toFixed(2)}</span>
-      <span class="position__pnl" style="color:${pnl >= 0 ? C.long : C.short}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} pips</span>
-    </div>
-    <div class="position__row">
-      <span style="color:var(--text-faint)">risk used</span>
-      <span style="color:var(--text-muted)">—</span>
-    </div>
-  `;
+  container.innerHTML = positions.map((p, idx) => {
+    const pnl = p.pnl || 0;
+    const side = (p.side || 'BUY').toUpperCase();
+    const symbol = p.symbol || 'US500';
+    const volume = p.volume || 0;
+    const entry = (p.entryPrice || p.entry_price || 0).toFixed(2);
+    const sl = p.stopLoss != null ? p.stopLoss.toFixed(2) : '—';
+    const tp = p.takeProfit != null ? p.takeProfit.toFixed(2) : '—';
+    const pnlColor = pnl >= 0 ? C.long : C.short;
+    const closeBtn = `<button class="position__close-btn" data-position-id="${p.id || p.positionId || idx}" type="button">Close</button>`;
+    return `
+      <div class="position__item">
+        <div class="position__row">
+          <span>${symbol} · ${side} · ${volume} lots</span>
+          ${closeBtn}
+        </div>
+        <div class="position__row">
+          <span style="color:var(--text-faint)">entry ${entry} · SL ${sl} · TP ${tp}</span>
+          <span class="position__pnl" style="color:${pnlColor}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.position__close-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pid = btn.getAttribute('data-position-id');
+      try {
+        await closePosition(pid);
+        btn.disabled = true;
+        btn.textContent = 'Closing…';
+      } catch (e) {
+        console.warn('close position failed', e);
+        btn.textContent = 'Error';
+        setTimeout(() => { btn.textContent = 'Close'; }, 2000);
+      }
+    });
+  });
 }
 
 function renderJournal(container, trades) {

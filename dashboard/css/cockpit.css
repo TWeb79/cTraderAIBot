@@ -589,14 +589,53 @@ html, body {
   color: var(--text-muted);
 }
 
+.position__item {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.position__item:last-child {
+  border-bottom: none;
+}
+
 .position__row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
   margin-bottom: 0.35rem;
+}
+
+.position__row:last-child {
+  margin-bottom: 0;
 }
 
 .position__pnl {
   font-weight: 500;
+}
+
+.position__close-btn {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid var(--hairline-bright);
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.position__close-btn:hover {
+  color: var(--short);
+  border-color: var(--short);
+  background: rgba(226, 87, 76, 0.12);
+}
+
+.position__close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Journal ── */

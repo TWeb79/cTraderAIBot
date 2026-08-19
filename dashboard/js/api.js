@@ -98,6 +98,15 @@ export async function fetchTrainingStatus() {
   return get('/api/training');
 }
 
+export async function closePosition(positionId) {
+  const res = await fetch(`${API_BASE}/api/positions/${encodeURIComponent(positionId)}/close`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`API close position -> ${res.status}`);
+  return res.json();
+}
+
 export function getApiHost() {
   if (API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
     try {

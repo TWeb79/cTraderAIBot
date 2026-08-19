@@ -81,6 +81,43 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def _normalize_position(pos: dict[str, Any]) -> dict[str, Any]:
+    """Map cTrader MCP position fields to dashboard-friendly keys.
+
+    cTrader Open API returns position objects with PascalCase keys
+    (e.g. ``SymbolName``, ``EntryPrice``, ``Profit``). The MCP wrapper
+    may lowercase them; this helper accepts both and normalizes to the
+    names the dashboard expects.
+    """
+    position_id = pos.get("id") or pos.get("positionId") or pos.get("Id") or pos.get("PositionId")
+    side = (pos.get("side") or pos.get("Side") or "").upper()
+    if side not in ("BUY", "SELL"):
+        side = "BUY" if side in ("B", "LONG", "L") else "SELL" if side in ("S", "SHORT") else side.upper()
+
+    pnl = (
+        pos.get("pnl")
+        or pos.get("profit")
+        or pos.get("Profit")
+        or pos.get("grossProfit")
+        or pos.get("unrealizedProfit")
+        or pos.get("UnrealizedProfit")
+        or 0.0
+    )
+
+    normalized: dict[str, Any] = {
+        "id": position_id,
+        "positionId": position_id,
+        "symbol": pos.get("symbolName") or pos.get("SymbolName") or pos.get("symbol"),
+        "side": side,
+        "volume": pos.get("volume") or pos.get("Volume") or 0,
+        "entryPrice": pos.get("entryPrice") or pos.get("EntryPrice") or pos.get("openPrice") or pos.get("OpenPrice") or 0,
+        "stopLoss": pos.get("stopLoss") or pos.get("StopLoss"),
+        "takeProfit": pos.get("takeProfit") or pos.get("TakeProfit"),
+        "pnl": pnl if pnl is not None else 0.0,
+    }
+    return {k: v for k, v in normalized.items() if v is not None}
+
+
 @app.on_event("startup")
 async def startup():
     global mcp
@@ -120,7 +157,8 @@ async def refresh_loop(interval_seconds: int = 15):
 
             account_raw = await mcp.get_balance()
             positions_raw = await mcp.get_positions()
-            positions = positions_raw if isinstance(positions_raw, list) else positions_raw.get("positions", [])
+            raw_positions = positions_raw if isinstance(positions_raw, list) else positions_raw.get("positions", [])
+            positions = [_normalize_position(p) for p in raw_positions]
 
             STATE.update(
                 bars=bars,
@@ -401,6 +439,18 @@ async def set_auto(payload: dict):
 
     await broadcast({"type": "auto", "auto": dict(AUTO)})
     return {"auto": dict(AUTO)}
+
+
+@app.post("/api/positions/{position_id}/close")
+async def close_position(position_id: int):
+    """Close an open position by id."""
+    if mcp is None:
+        return {"ok": False, "error": "MCP not connected"}
+    try:
+        result = await mcp.close_position(position_id)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 @app.get("/api/analysis")
