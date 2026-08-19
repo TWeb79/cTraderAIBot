@@ -210,7 +210,7 @@ async def optimize(days: int = 30, symbol: str | None = None, top_n: int = 10,
         registry = ParameterRegistry(registry_path) if registry_path else ParameterRegistry()
         live_synth = _build_live_synthetic(registry.get_live_feedback_summary(), feedback_weight)
 
-    async with CTraderMCPClient(secrets["ctrader_mcp_url"]) as client:
+    async with CTraderMCPClient(secrets.ctrader_mcp_url) as client:
         signal_bars, profile_bars, symbol_details, deals = await _fetch_data(
             symbol, signal_tf, profile_tf, days, client
         )

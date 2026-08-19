@@ -62,6 +62,38 @@ def test_ny_open_gap_state_detects_and_resolves_gap_above():
     assert out.iloc[0]["touched_close_prev"] == False  # before window opens, not yet touched
 
 
+def test_compute_session_levels_pre_ny_ny_split():
+    # One session (rollover 21:00 UTC), pre-NY hours priced around 100,
+    # NY hours (from 13:30 UTC) priced around 200 — distinct volume profiles.
+    idx_pre = pd.date_range("2026-08-03T22:00:00Z", "2026-08-04T13:00:00Z", freq="15min", tz="UTC")
+    pre_ny = pd.DataFrame({
+        "timestamp": idx_pre, "open": 100.0, "low": 99.5, "high": 100.5, "close": 100.0, "volume": 10.0,
+    })
+    idx_ny = pd.date_range("2026-08-04T13:30:00Z", "2026-08-04T20:00:00Z", freq="15min", tz="UTC")
+    ny = pd.DataFrame({
+        "timestamp": idx_ny, "open": 200.0, "low": 199.5, "high": 200.5, "close": 200.0, "volume": 10.0,
+    })
+    bars = pd.concat([pre_ny, ny], ignore_index=True)
+
+    levels = compute_session_levels(bars, bin_size=1.0, ny_open_utc="13:30")
+    row = levels.loc[pd.Timestamp("2026-08-03", tz="UTC")]
+
+    assert abs(row["poc_pre_ny"] - 100.5) < 1.0
+    assert abs(row["poc_ny"] - 200.5) < 1.0
+    assert abs(row["ny_open_price"] - 200.0) < 1e-6
+    assert abs(row["day_close_price"] - row["close"]) < 1e-6
+    # Whole-session profile still populated (backward compatible).
+    assert row["poc"] == row["poc"]  # not NaN
+
+
+def test_compute_session_levels_without_ny_open_utc_leaves_split_columns_nan():
+    day1 = _minute_bars("2026-08-03T22:00:00Z", 30, 100.0)
+    levels = compute_session_levels(day1, bin_size=1.0)
+    row = levels.iloc[0]
+    assert pd.isna(row["poc_pre_ny"])
+    assert pd.isna(row["ny_open_price"])
+
+
 def test_ny_open_gap_state_no_gap_when_no_prior_close():
     idx = pd.date_range("2026-08-04T13:00:00Z", periods=10, freq="1min", tz="UTC")
     bars = pd.DataFrame({

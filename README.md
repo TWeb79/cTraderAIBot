@@ -76,7 +76,10 @@ pytest                                                     # unit tests
 
 ## Dashboard
 
-The dashboard serves on **port 8058** and the API on **port 8158**.
+The dashboard serves on **port 8058** and the API on **port 8158**. When
+accessed from a non-localhost hostname (e.g. over the LAN), the frontend
+auto-detects the API port as `<dashboard port> + 100`, so no config change is
+needed to reach it from another machine.
 
 ```bash
 # Terminal 1 — API
@@ -87,6 +90,58 @@ python -m http.server 8058 --directory dashboard
 ```
 
 Then open `http://localhost:8058`.
+
+### Panels
+
+- **Chart** — candlestick or tick-volume "orderflow" view (toggle in the
+  toolbar), EMA/POC/value-area overlay, prediction TP/ENTRY/SL lines, session
+  markers (Asia/Frankfurt/NY), and mouse wheel zoom + drag pan (double-click
+  to reset). The days-of-history selector (1d/3d/7d/14d) re-fetches from
+  `/api/bars`.
+- **Session levels** — a live UTC session clock plus the "core datapoints"
+  readout: prior session POC/VAH/VAL, the pre-NY/NY sub-session split, prior
+  day close, and prior NY open (see `strategy/levels.py`).
+- **Auto trading** — lets you gate the live runner to a specific named
+  strategy (or turn automated entries off entirely) without restarting
+  `run_live.py`; see "Auto-mode gating" below. Also shows a model-learning
+  gauge and sparkline driven by the deterministic parameter registry's
+  optimization history (`training/registry.py`) — there is **no neural
+  network** behind this; it's a statistics readout, consistent with this
+  project's no-ML-in-the-live-loop design.
+- **Training** — starts an `optimize` or `simulate` job from the dashboard
+  (same jobs as `scripts/run_training.py`), streams progress over the
+  WebSocket, and can chain "optimize, then simulate" with one click.
+- **Signal feed / Open position / Trade journal** — unchanged from earlier
+  versions.
+
+### API endpoints
+
+In addition to `/api/health`, `/api/version`, `/api/state`, `/api/journal`,
+`/api/digest`, `/api/strategies`, `/api/sessions`, `/api/registry`, and
+`/api/analysis`:
+
+- `GET /api/registry/history?limit=20` — optimizer/retrain run history plus
+  live-feedback summary and current performance, for the learning sparkline.
+- `GET /api/bars?days=3&timeframe=M5` — enriched bars (indicators, session
+  levels, regime) plus `session_markers` for the chart.
+- `GET /api/auto` / `POST /api/auto/set` — read/write the dashboard's
+  auto-mode state (`enabled`, `strategy`, `use_trained`). Writing also
+  updates the `data/cache/.auto_control.json` file the live runner reads
+  (see below) and broadcasts the new state over the WebSocket.
+- `POST /api/training` / `GET /api/training` — start and poll a background
+  training job (`optimize` or `simulate`); progress is also broadcast over
+  the WebSocket as `{"type": "training", ...}`.
+
+### Auto-mode gating (dashboard ↔ live runner)
+
+The dashboard and `execution/live_runner.py` run as **separate processes**
+and never share memory, so the "Enable auto mode" toggle communicates
+through a small JSON control file, `data/cache/.auto_control.json`, the same
+pattern already used by the kill switch. `POST /api/auto/set` writes it;
+`live_runner.load_auto_control()` reads it once per cycle. If the file is
+missing, unreadable, or malformed, the live runner behaves exactly as before
+this feature existed (every risk-approved signal is taken) — the dashboard
+is opt-in and its absence never silently pauses live trading.
 
 ## Architecture
 

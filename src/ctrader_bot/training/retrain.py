@@ -17,7 +17,7 @@ import itertools
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT / "src") not in __import__("sys").path:
     __import__("sys").path.insert(0, str(PROJECT_ROOT / "src"))
 
@@ -115,7 +115,7 @@ async def retrain(days: int = 30, symbol: str | None = None, include_live: bool 
         feedback_weight = float(settings.get("training", {}).get("feedback_weight", 2.0))
         live_synth = _build_live_synthetic(registry.get_live_feedback_summary(), feedback_weight)
 
-    async with CTraderMCPClient(secrets["ctrader_mcp_url"]) as client:
+    async with CTraderMCPClient(secrets.ctrader_mcp_url) as client:
         signal_bars, profile_bars, symbol_details, deals = await _fetch_data(
             symbol, signal_tf, profile_tf, days, client
         )

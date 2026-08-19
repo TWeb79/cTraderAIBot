@@ -62,7 +62,7 @@ def session_markers(start: datetime, end: datetime) -> list[dict[str, Any]]:
                 ts = day.replace(hour=tod.hour, minute=tod.minute, second=0, microsecond=0)
                 if start <= ts <= end:
                     markers.append({
-                        "ts": ts.astimezone(timezone.utc).isoformat(),
+                        "ts": ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "label": w.label,
                         "kind": kind,
                         "session": w.key,

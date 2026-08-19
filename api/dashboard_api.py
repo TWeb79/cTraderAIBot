@@ -28,13 +28,19 @@ from ctrader_bot.journal.store import Journal
 from ctrader_bot.mcp_client import CTraderMCPClient
 from ctrader_bot.analysis.predictor import predict_next
 from ctrader_bot.strategy.strategies import list_strategies, default_strategy_name
-from ctrader_bot.strategy.sessions import session_windows
+from ctrader_bot.strategy.sessions import session_windows, session_markers
 from ctrader_bot.training.optimizer import optimize as optimize_run, _fetch_data, _prepare
 from ctrader_bot.training.simulator import simulate as simulate_run, append_simulated_to_registry
 from ctrader_bot.training.registry import ParameterRegistry
 from ctrader_bot.backtest.engine import prepare_backtest_bars
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Same path execution/live_runner.py reads via load_auto_control() — this is
+# the file-based control channel that lets the dashboard's Auto Mode toggle
+# and strategy selector actually gate the live-trading loop (a separate
+# process), not just the analysis-panel prediction. See implementationplan.md
+# §10.6 / §11.8.
+AUTO_CONTROL_PATH = PROJECT_ROOT / "data" / "cache" / ".auto_control.json"
 
 app = FastAPI(title="cTrader Bot Dashboard API", version="0.1.0")
 
@@ -161,14 +167,6 @@ async def health():
     }
 
 
-@app.get("/api/registry")
-async def get_registry():
-    """Expose the persistent parameter registry (best params + live feedback)."""
-    from ctrader_bot.training.registry import ParameterRegistry
-
-    return ParameterRegistry().export()
-
-
 @app.get("/api/version")
 async def version():
     return {
@@ -213,6 +211,22 @@ async def get_registry():
     return ParameterRegistry().export()
 
 
+@app.get("/api/registry/history")
+async def get_registry_history(limit: int = 20):
+    """Optimization-history time series, for the 'model is learning' chart.
+
+    Deterministic — this is a view over ``ParameterRegistry.optimization_history``
+    (grid-search / retrain runs), not live model inference. See
+    implementationplan.md §11.4 for why this replaces a literal NN visualization.
+    """
+    registry = ParameterRegistry()
+    return {
+        "history": registry.get_optimization_history(limit=limit),
+        "live_feedback": registry.get_live_feedback_summary(),
+        "performance": registry.get_performance(),
+    }
+
+
 # ── Enriched bars for the chart / orderflow view ───────────────────────────
 
 async def _fetch_enriched_bars(symbol: str, timeframe: str, days: int) -> list[dict]:
@@ -239,6 +253,18 @@ async def _fetch_enriched_bars(symbol: str, timeframe: str, days: int) -> list[d
             "poc_prev": None if pd.isna(row.get("poc_prev")) else float(row["poc_prev"]),
             "vah_prev": None if pd.isna(row.get("vah_prev")) else float(row["vah_prev"]),
             "val_prev": None if pd.isna(row.get("val_prev")) else float(row["val_prev"]),
+            # Session-split volume profile + extra training datapoints
+            # (implementationplan.md §11.1): pre-NY (Asia+Frankfurt) vs NY
+            # portions of the *prior* session, plus prior day-close / NY-open
+            # reference prices.
+            "poc_pre_ny_prev": None if pd.isna(row.get("poc_pre_ny_prev")) else float(row["poc_pre_ny_prev"]),
+            "vah_pre_ny_prev": None if pd.isna(row.get("vah_pre_ny_prev")) else float(row["vah_pre_ny_prev"]),
+            "val_pre_ny_prev": None if pd.isna(row.get("val_pre_ny_prev")) else float(row["val_pre_ny_prev"]),
+            "poc_ny_prev": None if pd.isna(row.get("poc_ny_prev")) else float(row["poc_ny_prev"]),
+            "vah_ny_prev": None if pd.isna(row.get("vah_ny_prev")) else float(row["vah_ny_prev"]),
+            "val_ny_prev": None if pd.isna(row.get("val_ny_prev")) else float(row["val_ny_prev"]),
+            "ny_open_price_prev": None if pd.isna(row.get("ny_open_price_prev")) else float(row["ny_open_price_prev"]),
+            "day_close_price_prev": None if pd.isna(row.get("day_close_price_prev")) else float(row["day_close_price_prev"]),
         })
     return records
 
@@ -246,7 +272,14 @@ async def _fetch_enriched_bars(symbol: str, timeframe: str, days: int) -> list[d
 @app.get("/api/bars")
 async def get_bars(days: int = 3, timeframe: str = "M5"):
     symbol = SETTINGS.get("symbol", "US500")
-    return {"symbol": symbol, "timeframe": timeframe, "bars": await _fetch_enriched_bars(symbol, timeframe, days)}
+    bars = await _fetch_enriched_bars(symbol, timeframe, days)
+    markers: list[dict] = []
+    if bars:
+        from datetime import datetime as _dt
+        start = _dt.fromisoformat(bars[0]["timestamp"])
+        end = _dt.fromisoformat(bars[-1]["timestamp"])
+        markers = session_markers(start, end)
+    return {"symbol": symbol, "timeframe": timeframe, "bars": bars, "session_markers": markers}
 
 
 # ── Training jobs (historical optimize, then simulated trades) ────────────
@@ -346,12 +379,27 @@ async def _run_training_job(mode: str, days: int, symbol: str | None,
 
 # ── Auto-mode analysis (strategy + trained data -> next-5min plan) ────────
 
+@app.get("/api/auto")
+async def get_auto():
+    return {"auto": dict(AUTO)}
+
+
 @app.post("/api/auto/set")
 async def set_auto(payload: dict):
     AUTO["enabled"] = bool(payload.get("enabled", False))
     if payload.get("strategy"):
         AUTO["strategy"] = payload["strategy"]
     AUTO["use_trained"] = bool(payload.get("use_trained", False))
+
+    # Persist to the file-based control channel the (separate-process) live
+    # runner polls each cycle — see AUTO_CONTROL_PATH above.
+    try:
+        AUTO_CONTROL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        AUTO_CONTROL_PATH.write_text(json.dumps(dict(AUTO)))
+    except OSError as e:
+        print(f"[warn] failed to write auto-control file: {e}")
+
+    await broadcast({"type": "auto", "auto": dict(AUTO)})
     return {"auto": dict(AUTO)}
 
 

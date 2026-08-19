@@ -40,15 +40,56 @@
             <h1 class="chart-panel__symbol" id="symbol">US500</h1>
             <span class="chart-panel__timeframe" id="timeframe">M5</span>
             <span class="chart-panel__meta">VOL PROFILE · APPROX (TICK VOL)</span>
+            <div class="chart-panel__toolbar">
+              <button class="chart-btn chart-btn--active" id="chart-mode-candles" type="button">Candles</button>
+              <button class="chart-btn" id="chart-mode-orderflow" type="button" title="Tick-volume proxy, not true bid/ask orderflow">Orderflow</button>
+              <button class="chart-btn" id="chart-reset-zoom" type="button" title="Reset zoom/pan">Reset zoom</button>
+              <select class="chart-select" id="chart-days" title="Bars to fetch">
+                <option value="1">1d</option>
+                <option value="3" selected>3d</option>
+                <option value="7">7d</option>
+                <option value="14">14d</option>
+              </select>
+            </div>
           </div>
           <svg id="chart" viewBox="0 0 740 380" preserveAspectRatio="xMidYMid meet"></svg>
         </section>
 
         <aside class="sidebar">
           <section class="panel">
-            <h2 class="panel__title">Currency strength</h2>
-            <p class="panel__subtitle">watchlist breadth, not exchange-wide</p>
-            <div id="breadth" class="breadth"></div>
+            <h2 class="panel__title">Session levels</h2>
+            <p class="panel__subtitle" id="session-clock">— UTC · session: —</p>
+            <div id="datapoints" class="datapoints"></div>
+          </section>
+
+          <section class="panel">
+            <h2 class="panel__title">Auto trading</h2>
+            <p class="panel__subtitle">strategy-gated live entries + model confidence</p>
+            <div class="auto-controls">
+              <label class="auto-controls__row">
+                <span>Strategy</span>
+                <select id="auto-strategy"></select>
+              </label>
+              <label class="auto-controls__row auto-controls__row--checkbox">
+                <input type="checkbox" id="auto-use-trained" />
+                <span>Use trained params</span>
+              </label>
+              <button class="chart-btn chart-btn--wide" id="auto-toggle" type="button">Enable auto mode</button>
+              <p class="auto-controls__hint" id="auto-hint">Off — live runner takes every risk-approved signal (unchanged default behavior).</p>
+            </div>
+            <div class="learning">
+              <div class="learning__gauge-row">
+                <div class="learning__gauge" id="learning-gauge">
+                  <span class="learning__gauge-value" id="learning-gauge-value">—</span>
+                </div>
+                <div class="learning__gauge-label">
+                  <div id="learning-direction">FLAT</div>
+                  <div class="learning__gauge-sub" id="learning-note">no analysis yet</div>
+                </div>
+              </div>
+              <svg id="learning-sparkline" class="learning__sparkline" viewBox="0 0 280 40" preserveAspectRatio="none"></svg>
+              <p class="learning__caption">Composite score across optimizer/retrain runs — a deterministic statistics engine, not a neural network. See implementationplan.md §11.4.</p>
+            </div>
           </section>
 
           <section class="panel">
@@ -63,6 +104,35 @@
           </section>
         </aside>
       </div>
+
+      <section class="panel training">
+        <h2 class="panel__title">Training</h2>
+        <p class="panel__subtitle">offline, deterministic — never places orders</p>
+        <div class="training__controls">
+          <label class="training__field">
+            <span>Mode</span>
+            <select id="training-mode">
+              <option value="optimize">Optimize (historical grid search)</option>
+              <option value="simulate">Simulate (bar-by-bar replay)</option>
+            </select>
+          </label>
+          <label class="training__field">
+            <span>Days</span>
+            <input type="number" id="training-days" value="30" min="1" max="365" />
+          </label>
+          <label class="training__field training__field--checkbox">
+            <input type="checkbox" id="training-include-live" />
+            <span>Include live feedback</span>
+          </label>
+          <button class="chart-btn chart-btn--primary" id="training-start" type="button">Start training</button>
+          <button class="chart-btn" id="training-run-simulate" type="button" title="Runs a simulate job using the just-optimized params' symbol/days">Then run simulated trades</button>
+        </div>
+        <div class="training__status">
+          <span class="training__status-badge" id="training-status-badge">idle</span>
+          <span id="training-progress"></span>
+        </div>
+        <div class="training__log" id="training-log"></div>
+      </section>
 
       <section class="panel journal">
         <h2 class="panel__title">Trade journal</h2>
@@ -88,6 +158,8 @@
 
   <script type="module" src="js/api.js"></script>
   <script type="module" src="js/chart.js"></script>
+  <script type="module" src="js/panels.js"></script>
+  <script type="module" src="js/training.js"></script>
   <script type="module" src="js/app.js"></script>
   <script type="module" src="js/wizard.js"></script>
 </body>

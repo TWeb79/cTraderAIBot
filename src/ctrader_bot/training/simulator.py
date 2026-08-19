@@ -181,6 +181,17 @@ def _simulate(bars: pd.DataFrame, settings: dict, symbol_meta: dict,
                         "close_prev": row.get("close_prev"),
                         "in_gap_window": row.get("in_gap_window"),
                         "gap_direction": row.get("gap_direction"),
+                        # Session-split volume-profile levels (see strategy/levels.py
+                        # compute_session_levels()) — additive, may be NaN/None if the
+                        # backtest config has no ny_open_utc set.
+                        "poc_pre_ny_prev": row.get("poc_pre_ny_prev"),
+                        "vah_pre_ny_prev": row.get("vah_pre_ny_prev"),
+                        "val_pre_ny_prev": row.get("val_pre_ny_prev"),
+                        "poc_ny_prev": row.get("poc_ny_prev"),
+                        "vah_ny_prev": row.get("vah_ny_prev"),
+                        "val_ny_prev": row.get("val_ny_prev"),
+                        "ny_open_price_prev": row.get("ny_open_price_prev"),
+                        "day_close_price_prev": row.get("day_close_price_prev"),
                     },
                 )
                 entry_snapshots.append({
@@ -198,6 +209,14 @@ def _simulate(bars: pd.DataFrame, settings: dict, symbol_meta: dict,
                     "close_prev": row.get("close_prev"),
                     "in_gap_window": row.get("in_gap_window"),
                     "gap_direction": row.get("gap_direction"),
+                    "poc_pre_ny_prev": row.get("poc_pre_ny_prev"),
+                    "vah_pre_ny_prev": row.get("vah_pre_ny_prev"),
+                    "val_pre_ny_prev": row.get("val_pre_ny_prev"),
+                    "poc_ny_prev": row.get("poc_ny_prev"),
+                    "vah_ny_prev": row.get("vah_ny_prev"),
+                    "val_ny_prev": row.get("val_ny_prev"),
+                    "ny_open_price_prev": row.get("ny_open_price_prev"),
+                    "day_close_price_prev": row.get("day_close_price_prev"),
                 })
 
     return trades, entry_snapshots
@@ -276,7 +295,7 @@ async def simulate(days: int = 30, symbol: str | None = None,
     signal_tf = settings["timeframes"]["signal"]
     profile_tf = settings["timeframes"]["profile"]
 
-    async with CTraderMCPClient(secrets["ctrader_mcp_url"]) as client:
+    async with CTraderMCPClient(secrets.ctrader_mcp_url) as client:
         signal_bars, profile_bars, symbol_details, deals = await _fetch_data(
             symbol, signal_tf, profile_tf, days, client
         )

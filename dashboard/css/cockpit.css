@@ -218,6 +218,71 @@ html, body {
   display: block;
 }
 
+/* ── Chart toolbar ── */
+.chart-panel__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.chart-btn {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
+  padding: 0.35rem 0.65rem;
+  border-radius: 4px;
+  border: 1px solid var(--hairline-bright);
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.chart-btn:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.chart-btn--active {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.chart-btn--primary {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.chart-btn--primary:hover {
+  background: var(--cyan);
+  color: #04110f;
+}
+
+.chart-btn--wide {
+  width: 100%;
+  text-align: center;
+  padding: 0.5rem 0.65rem;
+}
+
+.chart-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.chart-select {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--hairline-bright);
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
 /* ── Sidebar ── */
 .sidebar {
   width: 100%;
@@ -256,6 +321,153 @@ html, body {
   font-size: 0.65rem;
   color: var(--text-faint);
   margin-bottom: 0.75rem;
+}
+
+/* ── Core datapoints ── */
+.datapoints {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.datapoints__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.datapoints__row:last-child {
+  border-bottom: none;
+}
+
+.datapoints__label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+}
+
+.datapoints__value {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.datapoints__empty {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  color: var(--text-faint);
+}
+
+/* ── Auto-trading controls ── */
+.auto-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-bottom: 0.9rem;
+  margin-bottom: 0.9rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.auto-controls__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.auto-controls__row select {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid var(--hairline-bright);
+  background: var(--panel-raised);
+  color: var(--text);
+  max-width: 60%;
+}
+
+.auto-controls__row--checkbox {
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.auto-controls__hint {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.6rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+/* ── Model-learning visualization ── */
+.learning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.learning__gauge-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.learning__gauge {
+  --gauge-color: var(--cyan);
+  --gauge-pct: 50%;
+  position: relative;
+  flex: none;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle, var(--panel) 0 62%, transparent 62%),
+    conic-gradient(var(--gauge-color) var(--gauge-pct), var(--panel-raised) 0);
+}
+
+.learning__gauge-value {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.learning__gauge-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.learning__gauge-sub {
+  margin-top: 0.15rem;
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.learning__sparkline {
+  width: 100%;
+  height: 40px;
+  display: block;
+}
+
+.learning__caption {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.58rem;
+  line-height: 1.5;
+  color: var(--text-faint);
 }
 
 /* ── Breadth ── */
@@ -413,6 +625,111 @@ html, body {
 
 .journal__outcome {
   font-weight: 700;
+}
+
+/* ── Training panel ── */
+.training__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.9rem;
+  margin-bottom: 0.85rem;
+}
+
+.training__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+}
+
+.training__field select,
+.training__field input[type="number"] {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.7rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid var(--hairline-bright);
+  background: var(--panel-raised);
+  color: var(--text);
+  min-width: 9rem;
+}
+
+.training__field input[type="number"] {
+  min-width: 5rem;
+}
+
+.training__field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.training__status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.68rem;
+}
+
+.training__status-badge {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.6rem;
+  font-weight: 700;
+  background: var(--panel-raised);
+  color: var(--text-faint);
+  border: 1px solid var(--hairline-bright);
+}
+
+.training__status-badge--running {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: var(--amber);
+  animation: wizard-pulse 1.2s infinite;
+}
+
+.training__status-badge--completed {
+  background: rgba(63, 190, 142, 0.12);
+  color: var(--long);
+  border-color: var(--long);
+}
+
+.training__status-badge--failed {
+  background: rgba(226, 87, 76, 0.12);
+  color: var(--short);
+  border-color: var(--short);
+}
+
+.training__status-badge--idle {
+  background: var(--panel-raised);
+  color: var(--text-faint);
+  border-color: var(--hairline-bright);
+}
+
+#training-progress {
+  color: var(--text-faint);
+}
+
+.training__log {
+  height: 140px;
+  overflow-y: auto;
+  background: #060b15;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0.5rem 0.65rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  line-height: 1.6;
+  color: var(--text-muted);
 }
 
 /* ── Footer ── */

@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 import pandas as pd
@@ -51,7 +51,7 @@ async def main() -> None:
     to_dt = datetime.now(timezone.utc)
     from_dt = to_dt - timedelta(days=args.days)
 
-    async with CTraderMCPClient(secrets["ctrader_mcp_url"]) as client:
+    async with CTraderMCPClient(secrets.ctrader_mcp_url) as client:
         symbol_details = await client.get_symbol_details(symbol)
         print(f"Symbol: {symbol_details}")
 
@@ -117,6 +117,7 @@ async def main() -> None:
     print(format_report(report))
 
     out_dir = PROJECT_ROOT / "data" / "cache"
+    out_dir.mkdir(parents=True, exist_ok=True)
     trades_df = pd.DataFrame([vars(t) for t in result.trades])
     if not trades_df.empty:
         trades_df.to_csv(out_dir / "last_backtest_trades.csv", index=False)

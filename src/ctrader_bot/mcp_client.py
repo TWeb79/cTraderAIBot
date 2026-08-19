@@ -25,6 +25,9 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlparse
+
+import httpx2
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
@@ -67,7 +70,16 @@ class CTraderMCPClient:
 
     async def __aenter__(self) -> "CTraderMCPClient":
         self._stack = AsyncExitStack()
-        read, write = await self._stack.enter_async_context(streamable_http_client(self._url))
+        # Parse URL to extract port for Host header
+        parsed_url = urlparse(self._url)
+        port = parsed_url.port or (443 if parsed_url.scheme == "https" else 80)
+        # The cTrader MCP service expects Host header to be 127.0.0.1:<port>
+        # regardless of what host we're actually connecting to (e.g. host.docker.internal)
+        headers = {"Host": f"127.0.0.1:{port}"}
+        http_client = httpx2.AsyncClient(headers=headers)
+        read, write = await self._stack.enter_async_context(
+            streamable_http_client(self._url, http_client=http_client)
+        )
         self._session = await self._stack.enter_async_context(ClientSession(read, write))
         await self._session.initialize()
         return self

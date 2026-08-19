@@ -14,9 +14,11 @@ from ctrader_bot.execution.live_runner import (
     run_one_cycle,
     run_live,
 )
+from ctrader_bot.indicators.regime import Regime
 from ctrader_bot.journal.store import Journal
 from ctrader_bot.mcp_client import Bar
 from ctrader_bot.risk.risk_manager import RiskLimits, RiskManager
+from ctrader_bot.strategy.signals import Side, Signal
 from ctrader_bot.training.registry import ParameterRegistry
 
 
@@ -134,6 +136,79 @@ async def test_run_one_cycle_daily_loss_prevents_order(tmp_path, tmp_journal, ri
         await run_one_cycle(mcp, tmp_journal, risk_manager, "US500", "M5", "M1", settings, dry_run=False)
 
     mcp.place_market_order.assert_not_called()
+
+
+def _fixed_signal(reason: str = "range_fade_vah") -> Signal:
+    return Signal(side=Side.BUY, reason=reason, entry_price=105.0, stop_price=104.0,
+                  target_price=108.0, regime=Regime.RANGE)
+
+
+@pytest.mark.asyncio
+async def test_run_one_cycle_auto_disabled_skips_order(tmp_path, tmp_journal, risk_manager):
+    """POST /api/auto/set {"enabled": false} must pause new live entries."""
+    settings = _settings()
+    mcp = AsyncMock()
+    mcp.get_trendbars.return_value = _make_bars(100)
+    mcp.get_symbol_details.return_value = {"pipSize": 0.01, "minVolume": 0.01, "maxVolume": 100, "volumeStep": 0.01}
+
+    signal_bars = pd.DataFrame([
+        {"timestamp": b.timestamp, "close": b.close} for b in _make_bars(100)
+    ])
+    with patch("ctrader_bot.execution.live_runner.prepare_backtest_bars", return_value=signal_bars), \
+         patch("ctrader_bot.execution.live_runner.evaluate_bar", return_value=_fixed_signal()), \
+         patch("ctrader_bot.execution.live_runner.load_auto_control", return_value={"enabled": False}):
+        await run_one_cycle(mcp, tmp_journal, risk_manager, "US500", "M5", "M1", settings, dry_run=False)
+
+    mcp.place_market_order.assert_not_called()
+    mcp.get_balance.assert_not_called()  # gated before any account/order work
+
+
+@pytest.mark.asyncio
+async def test_run_one_cycle_auto_no_control_file_is_unchanged(tmp_path, tmp_journal, risk_manager):
+    """A missing control file (no dashboard running) must not change behavior:
+    the signal proceeds to sizing exactly as before this feature existed."""
+    settings = _settings()
+    mcp = AsyncMock()
+    mcp.get_trendbars.return_value = _make_bars(100)
+    mcp.get_symbol_details.return_value = {"pipSize": 0.01, "minVolume": 0.01, "maxVolume": 100, "volumeStep": 0.01}
+    mcp.get_balance.return_value = {"equity": 10000.0, "balance": 10000.0}
+    mcp.get_deals.return_value = []  # no calibration data -> cannot size -> safe no-op
+
+    signal_bars = pd.DataFrame([
+        {"timestamp": b.timestamp, "close": b.close} for b in _make_bars(100)
+    ])
+    with patch("ctrader_bot.execution.live_runner.prepare_backtest_bars", return_value=signal_bars), \
+         patch("ctrader_bot.execution.live_runner.evaluate_bar", return_value=_fixed_signal()), \
+         patch("ctrader_bot.execution.live_runner.load_auto_control", return_value={}):
+        await run_one_cycle(mcp, tmp_journal, risk_manager, "US500", "M5", "M1", settings, dry_run=False)
+
+    # Reached past the auto-gate (proven by get_balance being called) even
+    # though no control file / no strategy override was present.
+    mcp.get_balance.assert_called_once()
+    mcp.place_market_order.assert_not_called()  # no deals to size against
+
+
+@pytest.mark.asyncio
+async def test_run_one_cycle_auto_strategy_filters_unsupported_signal(tmp_path, tmp_journal, risk_manager):
+    """Selecting a strategy in the dashboard must restrict which signal
+    families the live loop acts on, not just what the analysis panel shows."""
+    settings = _settings()
+    mcp = AsyncMock()
+    mcp.get_trendbars.return_value = _make_bars(100)
+    mcp.get_symbol_details.return_value = {"pipSize": 0.01, "minVolume": 0.01, "maxVolume": 100, "volumeStep": 0.01}
+
+    signal_bars = pd.DataFrame([
+        {"timestamp": b.timestamp, "close": b.close} for b in _make_bars(100)
+    ])
+    # "ny_gap_fill" strategy only enables the gap_fill family; range_fade_vah must be rejected.
+    with patch("ctrader_bot.execution.live_runner.prepare_backtest_bars", return_value=signal_bars), \
+         patch("ctrader_bot.execution.live_runner.evaluate_bar", return_value=_fixed_signal("range_fade_vah")), \
+         patch("ctrader_bot.execution.live_runner.load_auto_control",
+               return_value={"enabled": True, "strategy": "ny_gap_fill"}):
+        await run_one_cycle(mcp, tmp_journal, risk_manager, "US500", "M5", "M1", settings, dry_run=False)
+
+    mcp.place_market_order.assert_not_called()
+    mcp.get_balance.assert_not_called()
 
 
 def test_check_kill_switch(tmp_path):

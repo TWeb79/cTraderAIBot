@@ -26,7 +26,7 @@ def test_session_markers_cover_open_and_close():
     assert ("ny", "close") in labels
     # NY open is 13:30 UTC -> within the day range
     ny_open = [m for m in markers if m["session"] == "ny" and m["kind"] == "open"][0]
-    assert ny_open["ts"].endswith("13:30:00")
+    assert ny_open["ts"].endswith("13:30:00Z")
 
 
 def test_session_markers_respect_range():

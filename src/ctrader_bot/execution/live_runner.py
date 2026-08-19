@@ -35,7 +35,7 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 
@@ -119,6 +119,7 @@ from ctrader_bot.strategy.levels import (
     compute_session_levels,
 )
 from ctrader_bot.strategy.signals import evaluate_bar, Side, Signal
+from ctrader_bot.strategy.strategies import get_strategy
 from ctrader_bot.training.registry import ParameterRegistry
 
 
@@ -137,6 +138,37 @@ def remove_kill_switch() -> None:
     p = Path(KILL_SWITCH_PATH)
     if p.exists():
         p.unlink()
+
+
+# ── Dashboard auto-mode control (file-based IPC) ────────────────────────────
+#
+# The dashboard API (api/dashboard_api.py, a separate process) writes this
+# file from POST /api/auto/set. It is read fresh every cycle so a toggle in
+# the dashboard takes effect on the next cycle without restarting the live
+# runner. This is advisory, additive gating only:
+#   - a missing/unreadable file, or a file without "enabled", means
+#     "unchanged" — the live runner behaves exactly as it always has
+#     (every risk-approved signal is taken), so CLI-only usage with no
+#     dashboard running is unaffected.
+#   - {"enabled": false} pauses new entries (existing open positions are
+#     still managed/closed normally).
+#   - {"enabled": true, "strategy": "<name>"} additionally restricts entries
+#     to signal families the named strategy (strategy/strategies.py) opts
+#     into, so "switching on auto mode" with a strategy selected in the
+#     dashboard actually changes what the live loop trades, not just what
+#     the analysis panel predicts.
+AUTO_CONTROL_PATH = str(_project_root() / "data" / "cache" / ".auto_control.json")
+
+
+def load_auto_control() -> dict[str, Any]:
+    """Best-effort read of the dashboard's auto-mode control file. Never raises —
+    a missing or malformed file is treated as 'no override'."""
+    try:
+        with open(AUTO_CONTROL_PATH) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -254,6 +286,18 @@ async def run_one_cycle(mcp: CTraderMCPClient, journal: Journal,
     if signal is None:
         print("[cycle] no signal")
         return
+
+    control = load_auto_control()
+    if control.get("enabled") is False:
+        print(f"[cycle] auto mode disabled via dashboard — signal '{signal.reason}' not taken")
+        return
+    control_strategy = control.get("strategy")
+    if control_strategy:
+        strat = get_strategy(control_strategy)
+        if not strat.accepts(signal.reason):
+            print(f"[cycle] signal '{signal.reason}' not enabled by dashboard strategy "
+                  f"'{control_strategy}' — skipping")
+            return
 
     account_raw = await mcp.get_balance()
     equity = account_raw.get("equity", account_raw.get("balance", 0))

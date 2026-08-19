@@ -31,7 +31,3 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 8158
 
 CMD ["uvicorn", "api.dashboard_api:app", "--host", "0.0.0.0", "--port", "8158"]
-
-EXPOSE 8158
-
-CMD ["uvicorn", "api.dashboard_api:app", "--host", "0.0.0.0", "--port", "8158"]

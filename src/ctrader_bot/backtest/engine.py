@@ -57,14 +57,17 @@ def prepare_backtest_bars(
     (signal_bars at cfg['timeframes']['signal'], profile_bars at cfg['timeframes']['profile']).
 
     Returns signal_bars enriched with: session_date, poc_prev/vah_prev/val_prev/close_prev,
-    in_gap_window/gap_direction/touched_close_prev, atr, regime.
+    poc_pre_ny_prev/vah_pre_ny_prev/val_pre_ny_prev (Asia+Frankfurt portion of the
+    prior session), poc_ny_prev/vah_ny_prev/val_ny_prev (NY portion), ny_open_price_prev,
+    day_close_price_prev, in_gap_window/gap_direction/touched_close_prev, atr, regime.
     """
     rollover = cfg.get("session_rollover_utc_hour", 21)
     bin_size = cfg["volume_profile"]["price_bin_ticks"] * cfg.get("pip_size", 1.0)
+    ny_open_utc = cfg.get("session", {}).get("ny_open_utc")
 
     session_levels = compute_session_levels(
         profile_bars, bin_size=bin_size, value_area_pct=cfg["volume_profile"]["value_area_pct"],
-        session_rollover_utc_hour=rollover,
+        session_rollover_utc_hour=rollover, ny_open_utc=ny_open_utc,
     )
     bars = attach_prior_session_levels(signal_bars, session_levels, session_rollover_utc_hour=rollover)
     bars = compute_ny_open_gap_state(

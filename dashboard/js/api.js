@@ -1,15 +1,43 @@
 /**
  * API client for the dashboard backend.
  *
- * Base URL: http://localhost:8158
+ * Base URL resolution (implementationplan.md §11.9): the dashboard is always
+ * served on the "80xx" port and the API on the matching "81xx" port for the
+ * same project number (RULES_ports.md's service-category pattern, e.g.
+ * 8058 -> 8158). Previously this only worked when accessed as
+ * localhost/127.0.0.1 — any LAN/Docker/remote-hostname access silently
+ * pointed fetches at the dashboard's own origin instead of the API.
  */
 
-const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-  ? 'http://localhost:8158'
-  : '';
+function resolveApiBase() {
+  const { protocol, hostname, port } = location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:8158`;
+  }
+  const dashboardPort = parseInt(port, 10);
+  if (Number.isFinite(dashboardPort)) {
+    return `${protocol}//${hostname}:${dashboardPort + 100}`;
+  }
+  // No explicit port (served behind a reverse proxy on 80/443) — fall back
+  // to same-origin; a proxy deployment is expected to route /api and /ws
+  // itself in this case.
+  return '';
+}
+
+const API_BASE = resolveApiBase();
 
 async function get(path) {
   const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) throw new Error(`API ${path} -> ${res.status}`);
+  return res.json();
+}
+
+async function post(path, body) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
   if (!res.ok) throw new Error(`API ${path} -> ${res.status}`);
   return res.json();
 }
@@ -36,6 +64,38 @@ export async function fetchDigest() {
 
 export async function fetchRegistry() {
   return get('/api/registry');
+}
+
+export async function fetchRegistryHistory(limit = 20) {
+  return get(`/api/registry/history?limit=${limit}`);
+}
+
+export async function fetchBars(days = 3, timeframe = 'M5') {
+  return get(`/api/bars?days=${days}&timeframe=${encodeURIComponent(timeframe)}`);
+}
+
+export async function fetchSessions() {
+  return get('/api/sessions');
+}
+
+export async function fetchStrategies() {
+  return get('/api/strategies');
+}
+
+export async function fetchAuto() {
+  return get('/api/auto');
+}
+
+export async function setAuto(payload) {
+  return post('/api/auto/set', payload);
+}
+
+export async function startTraining(payload) {
+  return post('/api/training', payload);
+}
+
+export async function fetchTrainingStatus() {
+  return get('/api/training');
 }
 
 export function getApiHost() {

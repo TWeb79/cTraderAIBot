@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY dashboard/ ./dashboard/
+COPY dashboard/ ./
 
 EXPOSE 8058
 
-CMD ["python3", "-m", "http.server", "8058", "--directory", "dashboard"]
+CMD ["python3", "-m", "http.server", "8058", "--directory", "."]

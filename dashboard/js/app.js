@@ -1,9 +1,13 @@
 /**
- * Main application controller.
+ * Main application controller — wires the WebSocket account/position feed,
+ * the polled enriched-bars endpoint (chart + core datapoints), and the
+ * sidebar/training panels together.
  */
 
-import { fetchVersion, fetchState, fetchJournal, createWebSocket } from './api.js';
-import { renderChart } from './chart.js';
+import { fetchVersion, fetchJournal, fetchBars, createWebSocket } from './api.js';
+import { renderChart, setChartMode, resetChartView } from './chart.js';
+import { initAutoControls, initSessionClock, renderDatapoints, renderLearningGauge, refreshLearningSparkline } from './panels.js';
+import { initTrainingPanel, handleTrainingBroadcast } from './training.js';
 
 const C = {
   long: '#3FBE8E',
@@ -14,6 +18,10 @@ const C = {
   cyan: '#4FD1C5',
   hairline: '#223050',
 };
+
+let chartDays = 3;
+let chartTimeframe = 'M5';
+let latestPrediction = null;
 
 function renderSignals(container, signals) {
   if (!signals || !signals.length) {
@@ -77,6 +85,45 @@ function renderJournal(container, trades) {
   }).join('');
 }
 
+/** predict_next()'s Prediction.to_dict() uses entry/stop/target; chart.js's
+ * overlay expects entry/sl/tp — map once here rather than in chart.js so
+ * chart.js stays a generic renderer. */
+function toChartPrediction(pred) {
+  if (!pred || pred.entry == null || pred.stop == null || pred.target == null) return null;
+  return { entry: pred.entry, sl: pred.stop, tp: pred.target };
+}
+
+async function refreshBars(chartEl, datapointsEl) {
+  try {
+    const { bars, session_markers: sessionMarkers } = await fetchBars(chartDays, chartTimeframe);
+    if (bars && bars.length) {
+      renderChart(chartEl, bars, toChartPrediction(latestPrediction), { sessionMarkers });
+      renderDatapoints(datapointsEl, bars[bars.length - 1]);
+    }
+  } catch (e) {
+    console.warn('bars fetch failed', e);
+  }
+}
+
+function initChartToolbar(chartEl, datapointsEl) {
+  const candlesBtn = document.getElementById('chart-mode-candles');
+  const orderflowBtn = document.getElementById('chart-mode-orderflow');
+  const resetBtn = document.getElementById('chart-reset-zoom');
+  const daysSel = document.getElementById('chart-days');
+
+  const setActive = (mode) => {
+    candlesBtn?.classList.toggle('chart-btn--active', mode === 'candles');
+    orderflowBtn?.classList.toggle('chart-btn--active', mode === 'orderflow');
+  };
+  candlesBtn?.addEventListener('click', () => { setChartMode(chartEl, 'candles'); setActive('candles'); });
+  orderflowBtn?.addEventListener('click', () => { setChartMode(chartEl, 'orderflow'); setActive('orderflow'); });
+  resetBtn?.addEventListener('click', () => resetChartView(chartEl));
+  daysSel?.addEventListener('change', () => {
+    chartDays = parseInt(daysSel.value, 10) || 3;
+    refreshBars(chartEl, datapointsEl);
+  });
+}
+
 async function init() {
   const versionEl = document.getElementById('version');
   const dailyPnlEl = document.getElementById('daily-pnl');
@@ -85,6 +132,7 @@ async function init() {
   const signalsEl = document.getElementById('signals');
   const positionEl = document.getElementById('position');
   const journalBody = document.getElementById('journal-body');
+  const datapointsEl = document.getElementById('datapoints');
 
   try {
     const version = await fetchVersion();
@@ -93,15 +141,18 @@ async function init() {
     console.warn('Version fetch failed', e);
   }
 
+  initChartToolbar(chartEl, datapointsEl);
+  initSessionClock();
+  initAutoControls();
+  initTrainingPanel();
+  refreshLearningSparkline();
+  setInterval(refreshLearningSparkline, 60000);
+
+  refreshBars(chartEl, datapointsEl);
+  setInterval(() => refreshBars(chartEl, datapointsEl), 15000);
+
   createWebSocket((data) => {
     if (data.type === 'snapshot') {
-      if (data.bars && data.bars.length) {
-        const liveBars = data.bars.map(b => ({
-          ...b,
-          timestamp: new Date(b.timestamp).toISOString(),
-        }));
-        renderChart(chartEl, liveBars, null);
-      }
       if (data.account) {
         if (equityEl) equityEl.textContent = data.account.equity?.toFixed(2) || '—';
         const pnl = data.account.daily_pnl || 0;
@@ -111,6 +162,13 @@ async function init() {
       if (data.positions) {
         renderPosition(positionEl, data.positions);
       }
+      if (data.auto) {
+        latestPrediction = data.auto;
+        renderLearningGauge(data.auto);
+      }
+    } else if (data.type === 'training') {
+      handleTrainingBroadcast(data);
+      if (data.status === 'completed') refreshLearningSparkline();
     }
   });
 
