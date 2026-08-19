@@ -1,25 +1,17 @@
-__pycache__/
-*.pyc
-.venv/
-venv/
-*.egg-info/
-src/ctrader_bot.egg-info/
+# Ignore log files
+*.log
 
-.env
-*.db
-*.db-journal
-data/cache/*
-!data/cache/.gitkeep
-!data/cache/.kill_switch
-reports/*
-!reports/.gitkeep
+# Ignore temporary files
+*.tmp
 
-.DS_Store
-.idea/
-.vscode/
-
-# Node / build
+# Ignore node_modules folder
 node_modules/
-dist/
-build/
 
+# Ignore __pycache__ folder
+__pycache__
+
+# Ignore .env files
+.env
+
+# Ignore vscode files
+.vscode

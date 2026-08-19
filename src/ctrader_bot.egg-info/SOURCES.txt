@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+src/ctrader_bot/__init__.py
+src/ctrader_bot/config.py
+src/ctrader_bot.egg-info/PKG-INFO
+src/ctrader_bot.egg-info/SOURCES.txt
+src/ctrader_bot.egg-info/dependency_links.txt
+src/ctrader_bot.egg-info/requires.txt
+src/ctrader_bot.egg-info/top_level.txt
+src/ctrader_bot/backtest/__init__.py
+src/ctrader_bot/execution/__init__.py
+src/ctrader_bot/indicators/__init__.py
+src/ctrader_bot/journal/__init__.py
+src/ctrader_bot/risk/__init__.py
+src/ctrader_bot/strategy/__init__.py
