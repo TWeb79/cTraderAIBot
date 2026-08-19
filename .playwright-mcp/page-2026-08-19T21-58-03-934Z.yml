@@ -1,0 +1,52 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: Cockpit
+      - generic [ref=e6]: v0.1.0
+    - generic [ref=e7]:
+      - generic [ref=e8]: MCP LINK
+      - generic [ref=e10]: MODEL RDY
+      - generic [ref=e12]: RISK GATE
+      - generic [ref=e14]: AUTOPILOT OFF
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]: DAILY P&L
+        - generic [ref=e19]: +0.00%
+      - generic [ref=e20]:
+        - generic [ref=e21]: EQUITY
+        - generic [ref=e22]: "912.44"
+      - button "Open feature tour" [ref=e23] [cursor=pointer]: "?"
+  - main [ref=e24]:
+    - generic [ref=e25]:
+      - generic [ref=e27]:
+        - heading "US500" [level=1] [ref=e28]
+        - generic [ref=e29]: M5
+        - generic [ref=e30]: VOL PROFILE · APPROX (TICK VOL)
+      - complementary [ref=e163]:
+        - generic [ref=e164]:
+          - heading "Currency strength" [level=2] [ref=e165]
+          - paragraph [ref=e166]: watchlist breadth, not exchange-wide
+        - generic [ref=e167]:
+          - heading "Signal feed" [level=2] [ref=e168]
+          - paragraph [ref=e169]: strategy decisions + gate outcome
+        - generic [ref=e170]:
+          - heading "Open position" [level=2] [ref=e171]
+          - generic [ref=e172]: No open position
+    - generic [ref=e173]:
+      - heading "Trade journal" [level=2] [ref=e174]
+      - table [ref=e175]:
+        - rowgroup [ref=e176]:
+          - row [ref=e177]:
+            - columnheader "Closed" [ref=e178]
+            - columnheader "Setup" [ref=e179]
+            - columnheader "Outcome" [ref=e180]
+            - columnheader "R" [ref=e181]
+            - columnheader "Lesson" [ref=e182]
+        - rowgroup [ref=e183]:
+          - row [ref=e184]:
+            - cell "No trades yet" [ref=e185]
+  - contentinfo [ref=e186]:
+    - generic [ref=e187]:
+      - text: All data is for demonstration. Wire to
+      - code [ref=e188]: http://localhost:8158
+      - text: for live data.

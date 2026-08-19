@@ -38,9 +38,21 @@ export async function fetchRegistry() {
   return get('/api/registry');
 }
 
+export function getApiHost() {
+  if (API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
+    try {
+      return new URL(API_BASE).host;
+    } catch (e) {
+      /* fall through to location.host */
+    }
+  }
+  return location.host;
+}
+
 export function createWebSocket(onMessage) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+  const host = getApiHost();
+  const ws = new WebSocket(`${proto}//${host}/ws`);
   ws.onmessage = (ev) => {
     try {
       const data = JSON.parse(ev.data);

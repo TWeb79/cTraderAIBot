@@ -1,0 +1,83 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: Cockpit
+        - generic [ref=e6]: v0.1.0
+      - generic [ref=e7]:
+        - generic [ref=e8]: MCP LINK
+        - generic [ref=e10]: MODEL RDY
+        - generic [ref=e12]: RISK GATE
+        - generic [ref=e14]: AUTOPILOT OFF
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - generic [ref=e18]: DAILY P&L
+          - generic [ref=e19]: 0.00%
+        - generic [ref=e20]:
+          - generic [ref=e21]: EQUITY
+          - generic [ref=e22]: —
+        - button "Open feature tour" [ref=e23] [cursor=pointer]: "?"
+    - main [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e27]:
+          - heading "US500" [level=1] [ref=e28]
+          - generic [ref=e29]: M5
+          - generic [ref=e30]: VOL PROFILE · APPROX (TICK VOL)
+        - complementary [ref=e32]:
+          - generic [ref=e33]:
+            - heading "Currency strength" [level=2] [ref=e34]
+            - paragraph [ref=e35]: watchlist breadth, not exchange-wide
+          - generic [ref=e36]:
+            - heading "Signal feed" [level=2] [ref=e37]
+            - paragraph [ref=e38]: strategy decisions + gate outcome
+          - generic [ref=e39]:
+            - heading "Open position" [level=2] [ref=e40]
+            - generic [ref=e41]: No open position
+      - generic [ref=e42]:
+        - heading "Trade journal" [level=2] [ref=e43]
+        - table [ref=e44]:
+          - rowgroup [ref=e45]:
+            - row [ref=e46]:
+              - columnheader "Closed" [ref=e47]
+              - columnheader "Setup" [ref=e48]
+              - columnheader "Outcome" [ref=e49]
+              - columnheader "R" [ref=e50]
+              - columnheader "Lesson" [ref=e51]
+          - rowgroup [ref=e52]:
+            - row [ref=e53]:
+              - cell "No trades yet" [ref=e54]
+    - contentinfo [ref=e55]:
+      - generic [ref=e56]:
+        - text: All data is for demonstration. Wire to
+        - code [ref=e57]: http://localhost:8158
+        - text: for live data.
+  - dialog "Feature tour" [ref=e59]:
+    - generic [ref=e60]:
+      - generic [ref=e61]:
+        - heading "Welcome to the Cockpit" [level=2] [ref=e62]
+        - generic [ref=e63]: Step 1 of 6
+      - button "Close tour" [ref=e64] [cursor=pointer]: ×
+    - generic [ref=e67]:
+      - paragraph [ref=e68]:
+        - text: This dashboard is the control surface for a
+        - strong [ref=e69]: 100% deterministic
+        - text: US500 volume-profile / regime trading bot. No LLM sits in the live decision path — every entry, stop and target is computed in Python from market structure.
+      - list [ref=e70]:
+        - listitem [ref=e71]:
+          - generic [ref=e72]: "1"
+          - text: Live market, account & positions from your cTrader session
+        - listitem [ref=e73]:
+          - generic [ref=e74]: "2"
+          - text: Trade journal + offline strategy digest
+        - listitem [ref=e75]:
+          - generic [ref=e76]: "3"
+          - text: Training toolkit (optimize / simulate / retrain)
+        - listitem [ref=e77]:
+          - generic [ref=e78]: "4"
+          - text: Hard safety controls (demo account, kill-switch, risk gate)
+      - paragraph [ref=e79]: This 6-step tour walks each feature and, on step 2, verifies the data link with a live diagnostic. It only auto-opens once.
+    - generic [ref=e80]:
+      - button "Skip tour" [ref=e81] [cursor=pointer]
+      - generic [ref=e82]:
+        - button "Back" [disabled] [ref=e83]
+        - button "Next" [ref=e84] [cursor=pointer]

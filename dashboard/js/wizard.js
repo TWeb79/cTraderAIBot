@@ -17,6 +17,7 @@ import {
   fetchJournal,
   fetchDigest,
   createWebSocket,
+  getApiHost,
 } from './api.js';
 
 const STORAGE_KEY = 'ctrader_wizard_done_v1';
@@ -242,6 +243,7 @@ function setCheck(name, state, statusText) {
 function testWebSocket() {
   return new Promise((resolve) => {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = getApiHost();
     let ws;
     let settled = false;
     const timer = setTimeout(() => {
@@ -251,7 +253,7 @@ function testWebSocket() {
       resolve({ ok: false });
     }, 4500);
     try {
-      ws = new WebSocket(`${proto}//${location.host}/ws`);
+      ws = new WebSocket(`${proto}//${host}/ws`);
       ws.onopen = () => logLine('[WS]', 'socket opened');
       ws.onmessage = () => {
         if (settled) return;
