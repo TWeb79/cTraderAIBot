@@ -98,7 +98,15 @@ function updateAutoUi() {
   }
 }
 
-export async function initAutoControls() {
+/**
+ * onAutoStateChange(autoState): optional callback fired once after the
+ * initial auto-state fetch and again after every push() — lets app.js sync
+ * the chart's prediction overlay to "visible by default whenever auto mode
+ * is off" (implementationplan.md §15.4: "I would like to see the prediction
+ * in the chart and then react on it if auto is not enabled") without
+ * panels.js needing to import chart.js itself (keeps one concern per file).
+ */
+export async function initAutoControls(onAutoStateChange) {
   const select = document.getElementById('auto-strategy');
   const toggle = document.getElementById('auto-toggle');
   const trainedBox = document.getElementById('auto-use-trained');
@@ -124,6 +132,7 @@ export async function initAutoControls() {
     console.warn('auto state fetch failed', e);
   }
   updateAutoUi();
+  if (onAutoStateChange) onAutoStateChange(autoState);
 
   const push = async () => {
     try {
@@ -137,6 +146,7 @@ export async function initAutoControls() {
       console.warn('auto/set failed', e);
     }
     updateAutoUi();
+    if (onAutoStateChange) onAutoStateChange(autoState);
   };
 
   toggle.addEventListener('click', () => {

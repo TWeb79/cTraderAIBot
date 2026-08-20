@@ -25,5 +25,4 @@ reports/*
 .idea
 .vscode
 tests/
-scripts/
 src/ctrader_bot.egg-info/

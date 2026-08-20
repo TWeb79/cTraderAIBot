@@ -15,7 +15,10 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from ctrader_bot.indicators.macd import macd as compute_macd
+from ctrader_bot.indicators.moving_averages import ema
 from ctrader_bot.indicators.regime import Regime, adx_di, classify_regime
+from ctrader_bot.indicators.vwap import session_vwap
 from ctrader_bot.risk.risk_manager import RiskManager, compute_stop_distance
 from ctrader_bot.strategy.levels import (
     attach_prior_session_levels,
@@ -52,14 +55,27 @@ def prepare_backtest_bars(
     signal_bars: pd.DataFrame,
     profile_bars: pd.DataFrame,
     cfg: dict,
+    macro_bars: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """signal_bars/profile_bars: DataFrames with columns timestamp, open, high, low, close, volume
     (signal_bars at cfg['timeframes']['signal'], profile_bars at cfg['timeframes']['profile']).
 
+    macro_bars: optional higher-timeframe (e.g. M15) bars with the same
+    columns, used only to attach a "background" MACD direction as of each
+    signal bar (implementationplan.md §15.3). Additive and optional: when
+    None (the default — every existing caller), the returned columns
+    macro_macd_bullish/macro_macd_histogram are simply absent, so nothing
+    about existing callers' output changes. Callers that do pass it are
+    still responsible for enabling any strategy-side use of those columns
+    (see strategy.signals.evaluate_bar's require_macro_confirmation flag) —
+    this function only attaches the data.
+
     Returns signal_bars enriched with: session_date, poc_prev/vah_prev/val_prev/close_prev,
     poc_pre_ny_prev/vah_pre_ny_prev/val_pre_ny_prev (Asia+Frankfurt portion of the
     prior session), poc_ny_prev/vah_ny_prev/val_ny_prev (NY portion), ny_open_price_prev,
-    day_close_price_prev, in_gap_window/gap_direction/touched_close_prev, atr, regime.
+    day_close_price_prev, in_gap_window/gap_direction/touched_close_prev, atr, regime,
+    vwap (session-anchored), ema_fast/ema_slow, and, when macro_bars is given,
+    macro_macd_bullish/macro_macd_histogram.
     """
     rollover = cfg.get("session_rollover_utc_hour", 21)
     bin_size = cfg["volume_profile"]["price_bin_ticks"] * cfg.get("pip_size", 1.0)
@@ -87,6 +103,25 @@ def prepare_backtest_bars(
         atr_median_lookback=cfg["regime"]["atr_median_lookback"],
         adx_period=cfg["regime"]["adx_period"],
     )
+
+    bars["vwap"] = session_vwap(bars, session_rollover_utc_hour=rollover)
+    ema_fast_period = cfg.get("indicators", {}).get("ema_fast_period", 20)
+    ema_slow_period = cfg.get("indicators", {}).get("ema_slow_period", 50)
+    bars["ema_fast"] = ema(bars["close"], ema_fast_period)
+    bars["ema_slow"] = ema(bars["close"], ema_slow_period)
+
+    if macro_bars is not None and not macro_bars.empty:
+        macro = macro_bars.sort_values("timestamp").copy()
+        macd_out = compute_macd(macro["close"])
+        macro = macro.join(macd_out)
+        macro_ind = macro[["timestamp", "bullish", "histogram"]].rename(
+            columns={"bullish": "macro_macd_bullish", "histogram": "macro_macd_histogram"}
+        )
+        bars = pd.merge_asof(
+            bars.sort_values("timestamp"), macro_ind.sort_values("timestamp"),
+            on="timestamp", direction="backward",
+        )
+
     return bars
 
 

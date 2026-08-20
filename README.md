@@ -11,7 +11,7 @@ to summarize the trade journal into written analysis.
 
 ## Version
 
-**0.1.0** — Built 2026-08-19
+**0.7.4** — Built 2026-08-20
 
 ## Safety
 
@@ -20,7 +20,14 @@ to summarize the trade journal into written analysis.
   run against any other account, and refuses to run at all unless
   `DEMO_MODE=true` in `.env`.
 - Every position requires a stop-loss. Hard daily-loss circuit breaker halts
-  new entries once triggered. See `config/config.yaml` under `risk:`.
+  new entries once triggered — `execution/live_runner.py` starts a new risk
+  session (and thus this breaker) automatically on every session rollover.
+  See `config/config.yaml` under `risk:`.
+- Position sizing refuses to size any trade if it can't derive
+  `value_per_point_per_lot` from real account deal history — the one
+  documented exception is `risk.value_per_point_per_lot_fallback`
+  (`config/config.yaml`), an explicit opt-in for a fresh/reset demo account
+  with no deal history yet; leave it `null` once real history exists.
 - No returns are guaranteed. Run the backtest and review the daily-return
   distribution and max drawdown before ever running the live runner, even in
   dry-run mode.
@@ -64,15 +71,42 @@ Two offline training mechanisms are available for strategy analysis and paramete
 
 Outputs are written to `data/reports/`.
 
+If `data/reports/parameter_registry.json`'s `best_params` shows `null` for
+every field despite a real `performance` block above it, that registry entry
+predates the v0.7.4 fix to `training/optimizer.py` (a DataFrame-shape bug
+made the dashboard's "optimize" job always save null params, so
+`--use-trained-params` / the dashboard's "Use trained params" toggle
+silently applied nothing). Re-run `optimize` once to overwrite it with real
+values.
+
 ## Usage
 
 ```bash
 .venv/bin/python scripts/run_backtest.py                 # backtest over historical data
 .venv/bin/python scripts/run_live.py --dry-run            # log-only, no orders placed
 .venv/bin/python scripts/run_live.py                      # places real orders on the demo account
+.venv/bin/python scripts/run_live.py --live                # same, explicit (overrides config.yaml's dry_run_default either way)
 .venv/bin/python scripts/run_journal_review.py            # offline Anthropic digest
 pytest                                                     # unit tests
 ```
+
+### Docker
+
+`docker-compose.yml` defines three services: `api`, `dashboard`, and
+`live_runner` (the actual trading loop — `execution/live_runner.py` via
+`scripts/run_live.py`, no CLI flags by default, same behavior as the plain
+`scripts/run_live.py` command above). All three need the cTrader desktop app
+running on the same host (`host.docker.internal:9876`).
+
+```bash
+docker compose up -d --build
+```
+
+`live_runner` runs with `restart: unless-stopped` and internally retries a
+dropped/failed MCP connection rather than exiting, so a transient loss of
+the desktop app doesn't require manual intervention. If you only want the
+dashboard without live trading, run `docker compose up -d api dashboard`
+instead.
 
 ## Dashboard
 
@@ -111,6 +145,13 @@ Then open `http://localhost:8058`.
 - **Training** — starts an `optimize` or `simulate` job from the dashboard
   (same jobs as `scripts/run_training.py`), streams progress over the
   WebSocket, and can chain "optimize, then simulate" with one click.
+- **Live status** — shows *why* the live runner did or didn't trade on its
+  most recent cycle (kill switch active, no data from MCP, no signal, auto
+  mode/strategy gating, sizing failure, order placed, ...), and a
+  dashboard-driven kill switch button. If this panel says "no data yet", no
+  `execution/live_runner.py` process is currently running — that alone is
+  the most common reason nothing is trading; see Usage/Docker above to
+  start one.
 - **Signal feed / Open position / Trade journal** — unchanged from earlier
   versions.
 
@@ -131,6 +172,14 @@ In addition to `/api/health`, `/api/version`, `/api/state`, `/api/journal`,
 - `POST /api/training` / `GET /api/training` — start and poll a background
   training job (`optimize` or `simulate`); progress is also broadcast over
   the WebSocket as `{"type": "training", ...}`.
+- `GET /api/live-status` — the live runner's own account of its last cycle
+  decision (`{"available": true, "outcome": "...", "detail": "...",
+  "timestamp": "..."}` or `{"available": false, "reason": "..."}` if no
+  live runner has ever reported in). Written by
+  `execution/live_runner.py`'s `_write_cycle_status()`.
+- `GET /api/kill-switch` / `POST /api/kill-switch/set {"active": bool}` —
+  read/write `data/cache/.kill_switch` from the dashboard (previously only
+  settable by a human directly touching the file).
 
 ### Auto-mode gating (dashboard ↔ live runner)
 

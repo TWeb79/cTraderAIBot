@@ -26,7 +26,20 @@ const chartState = new WeakMap();
 function getState(svgEl) {
   let s = chartState.get(svgEl);
   if (!s) {
-    s = { start: 0, len: 1, mode: 'candles', lastBars: null, lastPrediction: null, lastExtras: null, bound: false };
+    s = {
+      start: 0, len: 1, mode: 'candles', lastBars: null, lastPrediction: null,
+      lastExtras: null, bound: false,
+      // Activatable overlay (implementationplan.md feature request): open
+      // positions' entry/SL/TP + the predicted next-5min price. Off by
+      // default — the user turns it on via the toolbar's "Overlay" button.
+      showOverlay: false,
+      // §15.2 follow-up: per-candle buy/sell-by-price footprint data, keyed
+      // by bar timestamp, drawn instead of a plain tick-volume bar whenever
+      // the Orderflow view is active — see setFootprints() / draw()'s
+      // orderflow branch. Empty until the user switches into Orderflow mode
+      // (see app.js's refreshFootprints()), so candle mode never pays for it.
+      footprints: {},
+    };
     chartState.set(svgEl, s);
   }
   return s;
@@ -115,7 +128,17 @@ function draw(svgEl, bars, prediction, extras) {
   const ema20 = ema(closes, Math.min(20, closes.length));
   const vp = volumeProfile(view, 30);
 
-  const extra = prediction ? [prediction.entry, prediction.sl, prediction.tp].filter(v => v != null) : [];
+  // Open positions + the predicted next-5min price only affect the visible
+  // Y-range while the overlay is actually switched on (see toolbar's
+  // "Overlay" toggle / setOverlayEnabled) — otherwise a hidden prediction
+  // shouldn't reserve vertical space on the chart.
+  const positions = (state.showOverlay && extras && extras.positions) || [];
+  const overlayPrices = [];
+  if (state.showOverlay && prediction) {
+    overlayPrices.push(prediction.entry, prediction.sl, prediction.tp);
+  }
+  positions.forEach(p => overlayPrices.push(p.entry, p.sl, p.tp));
+  const extra = overlayPrices.filter(v => v != null);
   const lows = view.map(b => b.low);
   const highs = view.map(b => b.high);
   let min = Math.min(...lows, ...extra);
@@ -131,9 +154,9 @@ function draw(svgEl, bars, prediction, extras) {
   const x = (i) => PAD_LEFT + i * slot + slot / 2;
   const emaPoints = ema20.map((v, i) => `${x(i)},${y(v)}`).join(' ');
 
-  const priceLines = prediction
+  const priceLines = (state.showOverlay && prediction)
     ? [
-        prediction.tp != null && { label: 'TP', price: prediction.tp, color: 'var(--long)' },
+        prediction.tp != null && { label: 'PRED 5m (TP)', price: prediction.tp, color: 'var(--long)' },
         prediction.entry != null && { label: 'ENTRY', price: prediction.entry, color: 'var(--cyan)' },
         prediction.sl != null && { label: 'SL', price: prediction.sl, color: 'var(--short)' },
       ].filter(Boolean)
@@ -144,8 +167,9 @@ function draw(svgEl, bars, prediction, extras) {
   // ── Legend (implementationplan.md §11.2) ──────────────────────────────
   const legendItems = state.mode === 'orderflow'
     ? [
-        { swatch: 'var(--long)', label: 'Up-tick volume' },
-        { swatch: 'var(--short)', label: 'Down-tick volume' },
+        { swatch: 'var(--long)', label: 'Buy volume (by price)' },
+        { swatch: 'var(--short)', label: 'Sell volume (by price)' },
+        { swatch: 'var(--amber)', label: 'High-demand level' },
       ]
     : [
         { swatch: 'var(--long)', label: 'Bull candle' },
@@ -198,26 +222,70 @@ function draw(svgEl, bars, prediction, extras) {
     });
   }
 
-  // ── Prediction overlay (TP / ENTRY / SL) ───────────────────────────────
+  // ── Activatable overlay: predicted next-5min price (TP/ENTRY/SL) ───────
   priceLines.forEach(pl => {
     html += `<line x1="${PAD_LEFT}" x2="${TOTAL_W}" y1="${y(pl.price)}" y2="${y(pl.price)}" stroke="${pl.color}" stroke-width="1" stroke-dasharray="4 3" opacity="0.85" />`;
     html += `<text x="${TOTAL_W - 2}" y="${y(pl.price) - 3}" text-anchor="end" font-size="9" font-family="'JetBrains Mono', monospace" fill="${pl.color}">${pl.label} ${pl.price.toFixed(5)}</text>`;
   });
 
+  // ── Activatable overlay: open positions' entry / SL / TP ───────────────
+  positions.forEach(p => {
+    const col = p.side === 'SELL' ? 'var(--short)' : 'var(--long)';
+    const label = `${p.side || 'POS'}${p.volume != null ? ' ' + p.volume + 'L' : ''}`;
+    if (p.entry != null) {
+      html += `<line x1="${PAD_LEFT}" x2="${TOTAL_W}" y1="${y(p.entry)}" y2="${y(p.entry)}" stroke="${col}" stroke-width="1.4" opacity="0.9" />`;
+      html += `<text x="${PAD_LEFT + 3}" y="${y(p.entry) - 3}" font-size="8" font-family="'JetBrains Mono', monospace" fill="${col}">${escapeXml(label)} @ ${p.entry.toFixed(5)}</text>`;
+    }
+    if (p.sl != null) {
+      html += `<line x1="${PAD_LEFT}" x2="${TOTAL_W}" y1="${y(p.sl)}" y2="${y(p.sl)}" stroke="var(--short)" stroke-width="1" stroke-dasharray="3 2" opacity="0.7" />`;
+    }
+    if (p.tp != null) {
+      html += `<line x1="${PAD_LEFT}" x2="${TOTAL_W}" y1="${y(p.tp)}" y2="${y(p.tp)}" stroke="var(--long)" stroke-width="1" stroke-dasharray="3 2" opacity="0.7" />`;
+    }
+  });
+
   if (state.mode === 'orderflow') {
-    // Tick-volume "orderflow" proxy — the MCP feed only exposes tick volume,
-    // not real bid/ask delta, so this deliberately isn't labeled as true
-    // orderflow data (see legend + chart-panel__meta caption in index.html).
+    // Per-candle footprint (implementationplan.md §15.2 follow-up: "the
+    // orderflow footprint should be shown instead of a candle once i
+    // activate this view") — buy/sell tick-volume by price level, in place
+    // of the candle body itself. Still a tick-volume proxy, not real
+    // bid/ask depth (see legend + chart-panel__meta caption in index.html)
+    // — state.footprints is populated by app.js's refreshFootprints() only
+    // once the user switches into this view (see setFootprints()).
+    const halfW = Math.max(2, slot * 0.42);
     const maxVol = Math.max(...view.map(b => b.volume || 0), 1);
     const zeroY = CHART_H - PAD_BOTTOM;
     const bandH = plotH * 0.32;
     view.forEach((b, i) => {
-      const up = b.close >= b.open;
-      const col = up ? 'var(--long)' : 'var(--short)';
-      const h = ((b.volume || 0) / maxVol) * bandH;
-      html += `<rect x="${x(i) - candleW / 2}" y="${zeroY - h}" width="${candleW}" height="${Math.max(1, h)}" fill="${col}" opacity="0.85" />`;
+      const fp = state.footprints[b.timestamp];
+      if (fp && fp.levels && fp.levels.length) {
+        const levelMax = Math.max(...fp.levels.map(l => Math.max(l.buy_volume, l.sell_volume)), 1);
+        const halfBin = (fp.bin_size || (max - min) * 0.01) / 2;
+        fp.levels.forEach(l => {
+          const yTop = y(l.price + halfBin);
+          const yBot = y(l.price - halfBin);
+          const rowH = Math.max(1, yBot - yTop - 0.5);
+          const isDemand = l.price === fp.high_demand_price;
+          const sellW = (l.sell_volume / levelMax) * halfW;
+          const buyW = (l.buy_volume / levelMax) * halfW;
+          if (isDemand) {
+            html += `<rect x="${x(i) - halfW}" y="${yTop}" width="${halfW * 2}" height="${rowH}" fill="var(--amber)" opacity="0.15" />`;
+          }
+          html += `<rect x="${x(i) - sellW}" y="${yTop}" width="${sellW}" height="${rowH}" fill="var(--short)" opacity="0.85" />`;
+          html += `<rect x="${x(i)}" y="${yTop}" width="${buyW}" height="${rowH}" fill="var(--long)" opacity="0.85" />`;
+        });
+        html += `<line x1="${x(i)}" x2="${x(i)}" y1="${y(b.high)}" y2="${y(b.low)}" stroke="var(--hairline-bright)" stroke-width="0.5" opacity="0.5" />`;
+      } else {
+        // Footprint not loaded yet for this candle (still fetching, or
+        // outside the fetched range) — fall back to the simple tick-volume
+        // bar so the view isn't empty while data streams in.
+        const up = b.close >= b.open;
+        const col = up ? 'var(--long)' : 'var(--short)';
+        const h = ((b.volume || 0) / maxVol) * bandH;
+        html += `<rect x="${x(i) - candleW / 2}" y="${zeroY - h}" width="${candleW}" height="${Math.max(1, h)}" fill="${col}" opacity="0.4" />`;
+      }
     });
-    html += `<line x1="${PAD_LEFT}" x2="${PAD_LEFT + CHART_W}" y1="${zeroY}" y2="${zeroY}" stroke="var(--hairline-bright)" stroke-width="1" />`;
+    html += `<line x1="${PAD_LEFT}" x2="${PAD_LEFT + CHART_W}" y1="${zeroY}" y2="${zeroY}" stroke="var(--hairline-bright)" stroke-width="1" opacity="0.3" />`;
     // Faint close-price line for context.
     const closePoints = view.map((b, i) => `${x(i)},${y(b.close)}`).join(' ');
     html += `<polyline points="${closePoints}" fill="none" stroke="var(--text-faint)" stroke-width="1" opacity="0.5" />`;
@@ -287,10 +355,14 @@ function bindInteraction(svgEl) {
   let dragging = false;
   let dragStartX = 0;
   let dragStartFrac = 0;
+  let downX = 0, downY = 0, downTime = 0;
   svgEl.addEventListener('mousedown', (ev) => {
     dragging = true;
     dragStartX = ev.clientX;
     dragStartFrac = state.start;
+    downX = ev.clientX;
+    downY = ev.clientY;
+    downTime = Date.now();
   });
   window.addEventListener('mousemove', (ev) => {
     if (!dragging || !state.lastBars) return;
@@ -299,7 +371,28 @@ function bindInteraction(svgEl) {
     state.start = Math.max(0, Math.min(1 - state.len, dragStartFrac - deltaFrac));
     rerender();
   });
-  window.addEventListener('mouseup', () => { dragging = false; });
+  window.addEventListener('mouseup', (ev) => {
+    dragging = false;
+    // A "click" (not a drag-pan): small movement, short duration — used to
+    // zoom into a single candle's orderflow footprint (§15.2). Distinguished
+    // from panning so the existing drag-to-pan gesture is unaffected.
+    const moved = Math.hypot(ev.clientX - downX, ev.clientY - downY);
+    if (moved < 4 && Date.now() - downTime < 500 && state.lastBars) {
+      const rect = svgEl.getBoundingClientRect();
+      const scaleX = TOTAL_W / rect.width;
+      const svgX = (ev.clientX - rect.left) * scaleX;
+      const total = state.lastBars.length;
+      const startIdx = Math.max(0, Math.min(total - MIN_VIEW_BARS, Math.floor(state.start * total)));
+      const viewCount = Math.max(MIN_VIEW_BARS, Math.min(total - startIdx, Math.round(state.len * total)));
+      const slot = CHART_W / viewCount;
+      const localIdx = Math.round((svgX - PAD_LEFT - slot / 2) / slot);
+      const globalIdx = startIdx + localIdx;
+      if (globalIdx >= 0 && globalIdx < total && svgX >= PAD_LEFT && svgX <= PAD_LEFT + CHART_W) {
+        const bar = state.lastBars[globalIdx];
+        svgEl.dispatchEvent(new CustomEvent('candleclick', { detail: { bar } }));
+      }
+    }
+  });
 
   svgEl.addEventListener('dblclick', () => {
     state.start = 0;
@@ -338,5 +431,43 @@ export function resetChartView(svgEl) {
   const state = getState(svgEl);
   state.start = 0;
   state.len = 1;
+  if (state.lastBars) draw(svgEl, state.lastBars, state.lastPrediction, state.lastExtras);
+}
+
+/** Toggle the open-positions + predicted-price overlay on/off. */
+export function setOverlayEnabled(svgEl, enabled) {
+  const state = getState(svgEl);
+  state.showOverlay = !!enabled;
+  if (state.lastBars) draw(svgEl, state.lastBars, state.lastPrediction, state.lastExtras);
+}
+
+export function getOverlayEnabled(svgEl) {
+  return getState(svgEl).showOverlay;
+}
+
+/** Bulk per-candle footprint data (keyed by bar timestamp, from
+ * GET /api/bars/footprint) for the Orderflow chart view — see
+ * app.js's refreshFootprints(). Redraws immediately if Orderflow is active. */
+export function setFootprints(svgEl, footprints) {
+  const state = getState(svgEl);
+  state.footprints = footprints || {};
+  if (state.lastBars) draw(svgEl, state.lastBars, state.lastPrediction, state.lastExtras);
+}
+
+/**
+ * Merge new fields into the last-rendered extras (e.g. fresh `positions`
+ * from a WebSocket update) and redraw immediately, without waiting for the
+ * next /api/bars poll.
+ */
+export function updateChartExtras(svgEl, patch) {
+  const state = getState(svgEl);
+  state.lastExtras = { ...(state.lastExtras || {}), ...patch };
+  if (state.lastBars) draw(svgEl, state.lastBars, state.lastPrediction, state.lastExtras);
+}
+
+/** Update the prediction overlay (e.g. a fresh WebSocket `data.auto`) and redraw. */
+export function updateChartPrediction(svgEl, prediction) {
+  const state = getState(svgEl);
+  state.lastPrediction = prediction;
   if (state.lastBars) draw(svgEl, state.lastBars, state.lastPrediction, state.lastExtras);
 }

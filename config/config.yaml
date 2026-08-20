@@ -6,7 +6,8 @@ symbol: "US500"
 timeframes:
   signal: "M5"        # bar timeframe the strategy runs on
   profile: "M1"        # finer timeframe used to build the intraday volume profile
-  htf: "H1"             # higher timeframe used for regime confirmation
+  htf: "H1"             # higher timeframe used for regime confirmation (currently unused)
+  macro: "M15"           # "background" timeframe for MACD confirmation (§15.3, opt-in via signals.require_macro_confirmation)
 
 session:
   # NY session open window (UTC). Adjust for DST — US Eastern open is
@@ -31,12 +32,63 @@ regime:
 signals:
   level_proximity_atr_mult: 0.25   # how close price must be to a level (in ATR) to react to it
   breakout_confirm_atr_mult: 0.15  # close-beyond-level buffer to count as a real breakout
+  enable_bounce_strategies: false  # opt-in VWAP/EMA dynamic support-resistance bounces (§15.9)
+  bounce_proximity_atr_mult: 0.25  # how close price must be to vwap/ema_slow (in ATR) to react to it
+  require_macro_confirmation: false  # opt-in: only take a signal if the M15 "macro" MACD agrees (§15.3)
+
+indicators:
+  ema_fast_period: 20
+  ema_slow_period: 50    # the level used by the vwap/ema bounce strategies above
+  macd_fast_period: 12
+  macd_slow_period: 26
+  macd_signal_period: 9
 
 risk:
   risk_per_trade_pct: 1.5
   max_daily_loss_pct: 5.0
   max_open_risk_pct: 10.0
   min_stop_atr_mult: 0.5   # stop distance floor, in ATR, to avoid unrealistically tight stops
+
+  # Position sizing mode (§15.6). "risk_pct" (default) is the existing
+  # risk_per_trade_pct-based sizing, unchanged. "margin_pct" additionally
+  # caps the risk_pct-sized volume at margin_pct_of_free_margin of current
+  # free margin (never increases size beyond what risk_pct already allows).
+  position_sizing_mode: "risk_pct"   # "risk_pct" | "margin_pct"
+  margin_pct_of_free_margin: 5.0
+
+  # Fixed reward:risk target override (§15.7). When enforce_fixed_rr is
+  # true, every trade's take-profit is recomputed as
+  # entry +/- stop_distance * target_rr_ratio instead of using the
+  # strategy signal's own target_price. Off by default — config.yaml alone
+  # never changes existing behavior.
+  target_rr_ratio: 3.0
+  enforce_fixed_rr: false
+
+  # Explicit escape hatch for estimate_value_per_point_per_lot() (see
+  # risk_manager.py) refusing to size *any* trade when the account has zero
+  # historical closed deals for the traded symbol — true by design for a
+  # brand-new/reset demo account, but it means that account can never place
+  # its first trade without this. null (default) preserves the strict
+  # refuse-rather-than-guess behavior; set an explicit account-currency
+  # value-per-point-per-lot to unblock the first trade. Live_runner logs
+  # clearly whenever this fallback (not an empirically-derived value) is
+  # used, and it's never consulted once real deal history exists.
+  value_per_point_per_lot_fallback: null
+
+  # Trailing stop / TP-extension (§15.8, §15.8.1). Off by default. Once
+  # enabled: once a trade is `trigger_pips` in profit, the stop ratchets to
+  # `lock_pips` beyond entry; separately, once price is within
+  # `tp_extend_trigger_pips` of the current target, the target extends by
+  # `tp_extend_pips` and the stop ratchets to `sl_trail_distance_pips`
+  # behind price. The stop never moves backward (see
+  # risk.risk_manager.stop_improves / trailing_stop_update).
+  trailing_stop:
+    enabled: false
+    trigger_pips: 3.0
+    lock_pips: 1.4
+    tp_extend_trigger_pips: 5.0
+    tp_extend_pips: 5.0
+    sl_trail_distance_pips: 3.0
 
 backtest:
   spread_points: 0.4        # static spread assumption if historical spread isn't available
@@ -45,7 +97,12 @@ backtest:
 
 execution:
   poll_interval_seconds: 15
-  dry_run_default: true
+  # Now actually wired up in execution/live_runner.py's main() (previously
+  # dead config — the real default was always false/live regardless of this
+  # value). false here preserves every existing no-flags deployment's
+  # current behavior (live/demo orders placed unless --dry-run is passed).
+  # An explicit --dry-run or --live CLI flag always overrides this.
+  dry_run_default: false
   bars_for_context: 100
 
 training:

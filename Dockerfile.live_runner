@@ -1,0 +1,39 @@
+FROM debian:12-slim
+
+LABEL maintainer="Inventions4All - github:TWeb79"
+LABEL description="cTrader Anthropic Bot - Live Trading Runner (Project 58)"
+LABEL version="0.7.4"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN python3.11 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONPATH="/app/src"
+
+COPY requirements.txt pyproject.toml ./
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+COPY config/ ./config/
+COPY .env.example .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+# No EXPOSE — this service makes outbound calls to the cTrader MCP server
+# only, it doesn't listen on anything itself.
+#
+# No flags by default, matching README's documented
+# `.venv/bin/python scripts/run_live.py` baseline (places real orders on
+# the demo account unless config.yaml's execution.dry_run_default says
+# otherwise). Override docker-compose.yml's `command:` for this service to
+# pass --dry-run/--live/--use-trained-params instead.
+CMD ["python3", "scripts/run_live.py"]

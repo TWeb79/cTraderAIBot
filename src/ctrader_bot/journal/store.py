@@ -33,6 +33,7 @@ class TradeReflection(BaseModel):
     what_diverged: str
     lesson: str
     setup_tag: str
+    pnl: float = 0.0
 
 
 class TradeRecord(BaseModel):
@@ -84,13 +85,22 @@ class Journal:
         """)
         self.conn.commit()
 
-    def record_trade(self, decision: TradeDecision, reflection: TradeReflection, symbol: str) -> int:
+    def record_trade(self, decision: TradeDecision, reflection: TradeReflection, symbol: str,
+                     opened_at: str | None = None) -> int:
+        """opened_at: ISO timestamp of the actual trade entry, if known (the
+        live runner now captures this at order-placement time — see
+        execution/live_runner.py's _execute_trade). Defaults to "now" (the
+        close-time value) when omitted, preserving the exact prior behavior
+        for any caller that doesn't pass it (e.g. existing tests/backtest
+        tooling), so opened_at == closed_at only when the true entry time
+        genuinely isn't available.
+        """
         now = datetime.now(timezone.utc).isoformat()
         cursor = self.conn.execute(
             "INSERT INTO trades (opened_at, closed_at, symbol, decision_json, "
             "reflection_json, r_multiple, setup_tag) VALUES (?,?,?,?,?,?,?)",
             (
-                now,
+                opened_at or now,
                 now,
                 symbol,
                 decision.model_dump_json(),
@@ -113,20 +123,32 @@ class Journal:
         ).fetchone()[0]
 
     def aggregate_stats(self, limit: int = 50) -> dict[str, Any]:
+        """Overall win-rate/avg-R/by-tag stats, plus total_pnl — a straight
+        sum of each trade's reflection.pnl (added in the §15.5 journal
+        schema fix; defaults to 0.0 for older rows recorded before that
+        field existed, so this never raises on a mixed-history database).
+        """
         rows = self.conn.execute(
-            "SELECT r_multiple, setup_tag FROM trades ORDER BY id DESC LIMIT ?",
+            "SELECT r_multiple, setup_tag, reflection_json FROM trades ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
         if not rows:
             return {}
-        wins = [r for r, _ in rows if r > 0]
+        wins = [r for r, _, _ in rows if r > 0]
+        total_pnl = 0.0
+        for _, _, reflection_json in rows:
+            try:
+                total_pnl += float(__import__("json").loads(reflection_json).get("pnl", 0.0) or 0.0)
+            except (ValueError, TypeError):
+                pass
         stats: dict[str, Any] = {
             "n_trades": len(rows),
             "win_rate": len(wins) / len(rows),
-            "avg_r": sum(r for r, _ in rows) / len(rows),
+            "avg_r": sum(r for r, _, _ in rows) / len(rows),
+            "total_pnl": total_pnl,
         }
         by_tag: dict[str, list[float]] = {}
-        for r, tag in rows:
+        for r, tag, _ in rows:
             by_tag.setdefault(tag, []).append(r)
         stats["by_tag"] = {
             tag: {"n": len(vals), "avg_r": sum(vals) / len(vals)}
@@ -150,7 +172,7 @@ class Journal:
 
     def get_trades(self, limit: int = 25) -> list[dict[str, Any]]:
         rows = self.conn.execute(
-            "SELECT opened_at, closed_at, symbol, r_multiple, setup_tag, reflection_json "
+            "SELECT opened_at, closed_at, symbol, r_multiple, setup_tag, reflection_json, decision_json "
             "FROM trades ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -162,6 +184,7 @@ class Journal:
                 "r_multiple": r[3],
                 "setup_tag": r[4],
                 "reflection": __import__("json").loads(r[5]),
+                "decision": __import__("json").loads(r[6]) if r[6] else None,
             }
             for r in rows
         ]

@@ -190,7 +190,21 @@ def _run_backtest_sync(bars: pd.DataFrame, risk_limits: RiskLimits, initial_equi
         "avg_r": round(avg_r, 4),
         "total_return_pct": round(total_return_pct, 4),
         "max_drawdown_pct": round(max_drawdown_pct, 4),
-        "params": params,
+        # Flattened directly into this dict (not nested under a "params"
+        # key) so pd.DataFrame(results) in optimize() gets real
+        # level_proximity_atr_mult/breakout_confirm_atr_mult/etc. columns.
+        # A nested dict here used to produce a single "params" column
+        # holding dict objects — dashboard_api.py's `row.get(k)` extraction
+        # (and this project's ParameterRegistry) then always got None for
+        # every param, since no top-level column had those names. That's
+        # why the registry's best_params ended up all-null despite real
+        # backtest results: optimize() ran fine, but every dashboard-
+        # triggered "optimize" job silently saved null params, so
+        # --use-trained-params / auto-mode's "use_trained" toggle never
+        # actually overrode anything (live_runner.py's
+        # _apply_trained_params()'s `is not None` guard just skipped every
+        # key and fell back to config.yaml).
+        **params,
     }
 
 

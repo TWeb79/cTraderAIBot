@@ -98,13 +98,44 @@ export async function fetchTrainingStatus() {
   return get('/api/training');
 }
 
-export async function closePosition(positionId) {
-  const res = await fetch(`${API_BASE}/api/positions/${encodeURIComponent(positionId)}/close`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (!res.ok) throw new Error(`API close position -> ${res.status}`);
-  return res.json();
+export async function fetchSimulationTrades(limit = 50) {
+  return get(`/api/training/trades?limit=${limit}`);
+}
+
+export async function submitManualTrade() {
+  return post('/api/manual-trade');
+}
+
+export async function fetchManualTradeStatus() {
+  return get('/api/manual-trade');
+}
+
+/** "Why isn't it trading?" diagnostics — the live runner's own account of
+ * its last decision point (kill switch / no data / no signal / auto-mode
+ * gating / sizing / order placed), read from data/cache/.last_cycle_status.json. */
+export async function fetchLiveStatus() {
+  return get('/api/live-status');
+}
+
+export async function fetchKillSwitch() {
+  return get('/api/kill-switch');
+}
+
+export async function setKillSwitch(active) {
+  return post('/api/kill-switch/set', { active });
+}
+
+/** §15.2 orderflow footprint — buy/sell tick-volume by price level within a
+ * single candle, built from finer sub-bars (see the endpoint's own docstring
+ * for why this is a proxy, not true bid/ask depth). */
+export async function fetchFootprint(timestamp, timeframe = 'M5') {
+  return get(`/api/bars/${encodeURIComponent(timestamp)}/footprint?timeframe=${encodeURIComponent(timeframe)}`);
+}
+
+/** Bulk per-candle footprints for every bar currently in view — powers the
+ * chart's Orderflow mode itself (one request instead of one per candle). */
+export async function fetchBarFootprints(days = 3, timeframe = 'M5') {
+  return get(`/api/bars/footprint?days=${days}&timeframe=${encodeURIComponent(timeframe)}`);
 }
 
 export function getApiHost() {

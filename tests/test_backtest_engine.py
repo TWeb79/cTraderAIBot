@@ -115,3 +115,44 @@ def test_daily_loss_halt_prevents_new_trades_same_session():
     # With such a tight limit, at most one trade per session should ever be allowed to lose
     # meaningfully before the breaker halts further entries.
     assert isinstance(result.trades, list)
+
+
+def _base_cfg():
+    return {
+        "session_rollover_utc_hour": 21,
+        "pip_size": 1.0,
+        "volume_profile": {"price_bin_ticks": 1, "value_area_pct": 0.70},
+        "session": {"ny_open_utc": "13:30", "gap_fill_window_minutes": 60},
+        "regime": {
+            "adx_period": 14, "adx_trend_threshold": 25, "adx_range_threshold": 20,
+            "di_separation_min": 5, "trend_confirm_bars": 6,
+            "atr_expansion_factor": 1.3, "atr_median_lookback": 20,
+        },
+    }
+
+
+def test_prepare_backtest_bars_always_attaches_vwap_and_ema():
+    m1_bars = _build_synthetic_bars(n_sessions=4, bars_per_session=200, seed=3)
+    m5_bars = m1_bars.iloc[::5].reset_index(drop=True)
+    bars = prepare_backtest_bars(m5_bars, m1_bars, _base_cfg())
+    assert "vwap" in bars.columns
+    assert "ema_fast" in bars.columns
+    assert "ema_slow" in bars.columns
+    assert bars["vwap"].notna().any()
+
+
+def test_prepare_backtest_bars_macro_columns_absent_without_macro_bars():
+    m1_bars = _build_synthetic_bars(n_sessions=4, bars_per_session=200, seed=3)
+    m5_bars = m1_bars.iloc[::5].reset_index(drop=True)
+    bars = prepare_backtest_bars(m5_bars, m1_bars, _base_cfg())
+    assert "macro_macd_bullish" not in bars.columns
+
+
+def test_prepare_backtest_bars_attaches_macro_macd_when_macro_bars_given():
+    m1_bars = _build_synthetic_bars(n_sessions=4, bars_per_session=200, seed=3)
+    m5_bars = m1_bars.iloc[::5].reset_index(drop=True)
+    m15_bars = m1_bars.iloc[::15].reset_index(drop=True)
+    bars = prepare_backtest_bars(m5_bars, m1_bars, _base_cfg(), macro_bars=m15_bars)
+    assert "macro_macd_bullish" in bars.columns
+    assert "macro_macd_histogram" in bars.columns
+    assert len(bars) == len(m5_bars)

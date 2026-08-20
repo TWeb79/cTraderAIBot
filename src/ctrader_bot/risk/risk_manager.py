@@ -50,6 +50,101 @@ def compute_stop_distance(atr: float, raw_stop_distance: float, min_stop_atr_mul
     return max(raw_stop_distance, min_stop_atr_mult * atr)
 
 
+def fixed_rr_target_price(entry_price: float, stop_price: float, target_rr_ratio: float) -> float:
+    """Take-profit price at a fixed reward:risk ratio from the stop distance
+    (implementationplan.md §15.7 — default 3:1). Direction-agnostic: mirrors
+    the stop's signed offset from entry, so it works for both a long (stop
+    below entry) and a short (stop above entry) without a Side parameter.
+    """
+    stop_offset = entry_price - stop_price
+    return entry_price + stop_offset * target_rr_ratio
+
+
+def margin_based_volume(
+    free_margin: float | None,
+    margin_pct: float,
+    margin_per_lot: float | None,
+    min_volume: float,
+    max_volume: float,
+    volume_step: float,
+) -> float | None:
+    """Position size from a target % of free margin (implementationplan.md
+    §15.6), as an alternative/cap to risk_per_trade_pct-based sizing. Returns
+    None if free margin or the per-lot margin cost isn't known, or if the
+    resulting size would be below the symbol's minimum tradable volume —
+    callers must not fall back to a guessed size (same policy as
+    estimate_value_per_point_per_lot).
+    """
+    if not free_margin or free_margin <= 0:
+        return None
+    if not margin_per_lot or margin_per_lot <= 0:
+        return None
+    target_margin = free_margin * margin_pct / 100
+    volume = target_margin / margin_per_lot
+    steps = math.floor(volume / volume_step)
+    volume = steps * volume_step
+    volume = min(volume, max_volume)
+    if volume < min_volume:
+        return None
+    return round(volume, 8)
+
+
+def stop_improves(is_buy: bool, old_stop: float, candidate_stop: float) -> bool:
+    """True if candidate_stop is strictly more favorable than old_stop —
+    higher for a long, lower for a short. Enforces the "never move the stop
+    backward" invariant from implementationplan.md §15.8.1.
+    """
+    return candidate_stop > old_stop if is_buy else candidate_stop < old_stop
+
+
+def trailing_stop_update(
+    is_buy: bool,
+    entry_price: float,
+    current_price: float,
+    current_stop: float,
+    current_target: float | None,
+    pip_size: float,
+    trigger_pips: float,
+    lock_pips: float,
+    tp_extend_trigger_pips: float,
+    tp_extend_pips: float,
+    sl_trail_distance_pips: float,
+) -> tuple[float, float | None]:
+    """Pure trailing-stop / TP-extension math (implementationplan.md §15.8 /
+    §15.8.1). Returns (new_stop, new_target); a candidate stop is only ever
+    adopted if `stop_improves` says it's strictly better than current_stop,
+    so the stop never moves backward regardless of how price moves.
+
+    Two independent, additive mechanisms:
+      1. Profit-lock: once price is `trigger_pips` in profit, ratchet the
+         stop to `lock_pips` beyond entry (in the trade's favor).
+      2. TP-extend: once price is within `tp_extend_trigger_pips` of the
+         current target, push the target out by `tp_extend_pips` and ratchet
+         the stop to `sl_trail_distance_pips` behind the current price.
+    """
+    direction = 1 if is_buy else -1
+    profit_pips = (current_price - entry_price) * direction / pip_size
+    epsilon_pips = 1e-9  # float-noise guard so e.g. 2.9999999999999982 still counts as >= 3.0
+
+    new_stop = current_stop
+    new_target = current_target
+
+    if profit_pips >= trigger_pips - epsilon_pips:
+        candidate = entry_price + direction * lock_pips * pip_size
+        if stop_improves(is_buy, new_stop, candidate):
+            new_stop = candidate
+
+    if current_target:
+        distance_to_target_pips = abs(current_target - current_price) / pip_size
+        if distance_to_target_pips <= tp_extend_trigger_pips + epsilon_pips:
+            new_target = current_target + direction * tp_extend_pips * pip_size
+            candidate = current_price - direction * sl_trail_distance_pips * pip_size
+            if stop_improves(is_buy, new_stop, candidate):
+                new_stop = candidate
+
+    return new_stop, new_target
+
+
 @dataclass
 class RiskManager:
     limits: RiskLimits

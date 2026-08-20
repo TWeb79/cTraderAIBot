@@ -5,6 +5,10 @@ from ctrader_bot.risk.risk_manager import (
     RiskManager,
     compute_stop_distance,
     estimate_value_per_point_per_lot,
+    fixed_rr_target_price,
+    margin_based_volume,
+    stop_improves,
+    trailing_stop_update,
 )
 
 
@@ -99,3 +103,91 @@ def test_register_closed_trade_frees_open_risk_and_records_pnl():
     rm.register_closed_trade("t1", realized_pnl=-50)
     assert rm.current_open_risk_amount() == 0
     assert rm.realized_pnl_today == -50
+
+
+# ── Fixed 3:1 RR (§15.7) ─────────────────────────────────────────────────
+
+def test_fixed_rr_target_price_long():
+    target = fixed_rr_target_price(entry_price=100, stop_price=90, target_rr_ratio=3.0)
+    assert target == 130
+
+
+def test_fixed_rr_target_price_short():
+    target = fixed_rr_target_price(entry_price=100, stop_price=110, target_rr_ratio=3.0)
+    assert target == 70
+
+
+# ── Margin-% sizing (§15.6) ──────────────────────────────────────────────
+
+def test_margin_based_volume_basic():
+    # 5% of 10000 free margin = 500; margin_per_lot = 250 -> 2.0 lots
+    vol = margin_based_volume(free_margin=10000, margin_pct=5.0, margin_per_lot=250,
+                              min_volume=0.01, max_volume=100, volume_step=0.01)
+    assert vol == 2.0
+
+
+def test_margin_based_volume_none_without_free_margin():
+    assert margin_based_volume(None, 5.0, 250, 0.01, 100, 0.01) is None
+    assert margin_based_volume(0, 5.0, 250, 0.01, 100, 0.01) is None
+
+
+def test_margin_based_volume_none_without_margin_per_lot():
+    assert margin_based_volume(10000, 5.0, None, 0.01, 100, 0.01) is None
+
+
+def test_margin_based_volume_below_minimum_returns_none():
+    vol = margin_based_volume(free_margin=1, margin_pct=1.0, margin_per_lot=1000,
+                              min_volume=0.01, max_volume=100, volume_step=0.01)
+    assert vol is None
+
+
+# ── Trailing stop / TP extension (§15.8 / §15.8.1) ──────────────────────
+
+def test_stop_improves_long_and_short():
+    assert stop_improves(True, old_stop=95, candidate_stop=97) is True
+    assert stop_improves(True, old_stop=95, candidate_stop=93) is False
+    assert stop_improves(False, old_stop=105, candidate_stop=103) is True
+    assert stop_improves(False, old_stop=105, candidate_stop=107) is False
+
+
+def test_trailing_stop_locks_profit_once_trigger_reached_long():
+    new_stop, new_target = trailing_stop_update(
+        is_buy=True, entry_price=100.0, current_price=100.3, current_stop=95.0, current_target=110.0,
+        pip_size=0.1, trigger_pips=3.0, lock_pips=1.4,
+        tp_extend_trigger_pips=5.0, tp_extend_pips=5.0, sl_trail_distance_pips=3.0,
+    )
+    # profit_pips = (100.3-100)/0.1 = 3.0 >= trigger -> lock at entry + 1.4*pip = 100.14
+    assert new_stop == pytest.approx(100.14)
+    assert new_target == 110.0
+
+
+def test_trailing_stop_never_moves_backward():
+    # Already locked in at 100.14; a subsequent smaller-profit poll must not regress it.
+    new_stop, _ = trailing_stop_update(
+        is_buy=True, entry_price=100.0, current_price=100.31, current_stop=100.14, current_target=110.0,
+        pip_size=0.1, trigger_pips=3.0, lock_pips=1.0,  # a smaller lock_pips than before
+        tp_extend_trigger_pips=5.0, tp_extend_pips=5.0, sl_trail_distance_pips=3.0,
+    )
+    assert new_stop == 100.14  # unchanged, not regressed to entry+1.0*pip=100.10
+
+
+def test_trailing_stop_extends_tp_when_price_near_target_long():
+    new_stop, new_target = trailing_stop_update(
+        is_buy=True, entry_price=100.0, current_price=109.8, current_stop=105.0, current_target=110.0,
+        pip_size=0.1, trigger_pips=3.0, lock_pips=1.4,
+        tp_extend_trigger_pips=5.0, tp_extend_pips=5.0, sl_trail_distance_pips=3.0,
+    )
+    # distance_to_target = (110-109.8)/0.1 = 2 pips <= 5 -> extend target by 5 pips, ratchet stop to price-3pips
+    assert new_target == pytest.approx(110.5)
+    assert new_stop == pytest.approx(109.5)
+
+
+def test_trailing_stop_extension_never_moves_stop_backward_short():
+    new_stop, new_target = trailing_stop_update(
+        is_buy=False, entry_price=100.0, current_price=90.2, current_stop=90.0, current_target=90.0,
+        pip_size=0.1, trigger_pips=3.0, lock_pips=1.4,
+        tp_extend_trigger_pips=5.0, tp_extend_pips=5.0, sl_trail_distance_pips=3.0,
+    )
+    # candidate stop from tp-extend = price + 3pips = 90.5, which is *less* favorable
+    # than the existing 90.0 stop for a short -> must not regress.
+    assert new_stop == 90.0

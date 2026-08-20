@@ -12,7 +12,7 @@
     <header class="annunciator">
       <div class="annunciator__brand">
         <span class="annunciator__title">Cockpit</span>
-        <span class="annunciator__version" id="version">v0.1.0</span>
+        <span class="annunciator__version" id="version">v0.7.4</span>
       </div>
       <div class="annunciator__lights">
         <span class="light" id="light-mcp"><span class="light__dot"></span>MCP LINK</span>
@@ -43,6 +43,7 @@
             <div class="chart-panel__toolbar">
               <button class="chart-btn chart-btn--active" id="chart-mode-candles" type="button">Candles</button>
               <button class="chart-btn" id="chart-mode-orderflow" type="button" title="Tick-volume proxy, not true bid/ask orderflow">Orderflow</button>
+              <button class="chart-btn" id="chart-overlay-toggle" type="button" title="Show open positions' entry/SL/TP + the predicted next-5min price on the chart">Overlay</button>
               <button class="chart-btn" id="chart-reset-zoom" type="button" title="Reset zoom/pan">Reset zoom</button>
               <select class="chart-select" id="chart-days" title="Bars to fetch">
                 <option value="1">1d</option>
@@ -60,6 +61,23 @@
             <h2 class="panel__title">Session levels</h2>
             <p class="panel__subtitle" id="session-clock">— UTC · session: —</p>
             <div id="datapoints" class="datapoints"></div>
+          </section>
+
+          <section class="panel">
+            <h2 class="panel__title">Live status</h2>
+            <p class="panel__subtitle">why the live runner did (or didn't) trade last cycle</p>
+            <div class="live-status">
+              <div class="live-status__row">
+                <span class="live-status__outcome" id="live-status-outcome">no data yet</span>
+                <span class="live-status__time" id="live-status-time">—</span>
+              </div>
+              <p class="live-status__detail" id="live-status-detail">
+                No cycle status recorded yet. This means either the live runner process isn't
+                running (see README's Usage/Docker sections), or the dashboard API hasn't reached
+                it yet.
+              </p>
+              <button class="chart-btn chart-btn--wide" id="kill-switch-toggle" type="button">Activate kill switch</button>
+            </div>
           </section>
 
           <section class="panel">
@@ -93,6 +111,25 @@
           </section>
 
           <section class="panel">
+            <h2 class="panel__title">Predicted trade</h2>
+            <p class="panel__subtitle">next-5min plan from the deterministic signal — TP is the predicted price</p>
+            <div id="predicted-trade" class="predicted-trade">
+              <div class="predicted-trade__row">
+                <span class="predicted-trade__direction predicted-trade__direction--flat" id="predicted-direction">FLAT</span>
+                <span class="predicted-trade__likelihood" id="predicted-likelihood">—</span>
+              </div>
+              <div class="predicted-trade__prices">
+                <div class="predicted-trade__price"><span>Entry</span><span id="predicted-entry">—</span></div>
+                <div class="predicted-trade__price"><span>SL</span><span id="predicted-sl">—</span></div>
+                <div class="predicted-trade__price"><span>TP (predicted price)</span><span id="predicted-tp">—</span></div>
+              </div>
+              <p class="predicted-trade__note" id="predicted-note">no prediction yet</p>
+              <button class="chart-btn chart-btn--primary chart-btn--wide" id="predicted-execute" type="button" disabled>Execute trade</button>
+              <p class="predicted-trade__status" id="predicted-status"></p>
+            </div>
+          </section>
+
+          <section class="panel">
             <h2 class="panel__title">Signal feed</h2>
             <p class="panel__subtitle">strategy decisions + gate outcome</p>
             <div id="signals" class="signals"></div>
@@ -102,30 +139,56 @@
             <h2 class="panel__title">Open position</h2>
             <div id="position" class="position">No open position</div>
           </section>
+
+          <section class="panel">
+            <h2 class="panel__title">Orderflow footprint</h2>
+            <p class="panel__subtitle" id="footprint-subtitle">Click a candle on the chart to inspect buy/sell volume by price level</p>
+            <div id="footprint" class="footprint">
+              <div class="footprint__empty">No candle selected</div>
+            </div>
+          </section>
         </aside>
       </div>
 
       <section class="panel training">
         <h2 class="panel__title">Training</h2>
         <p class="panel__subtitle">offline, deterministic — never places orders</p>
-        <div class="training__controls">
-          <label class="training__field">
-            <span>Mode</span>
-            <select id="training-mode">
-              <option value="optimize">Optimize (historical grid search)</option>
-              <option value="simulate">Simulate (bar-by-bar replay)</option>
-            </select>
-          </label>
-          <label class="training__field">
-            <span>Days</span>
-            <input type="number" id="training-days" value="30" min="1" max="365" />
-          </label>
-          <label class="training__field training__field--checkbox">
-            <input type="checkbox" id="training-include-live" />
-            <span>Include live feedback</span>
-          </label>
-          <button class="chart-btn chart-btn--primary" id="training-start" type="button">Start training</button>
-          <button class="chart-btn" id="training-run-simulate" type="button" title="Runs a simulate job using the just-optimized params' symbol/days">Then run simulated trades</button>
+        <div class="training__body">
+          <div class="training__controls">
+            <label class="training__field">
+              <span>Mode</span>
+              <select id="training-mode">
+                <option value="optimize">Optimize (historical grid search)</option>
+                <option value="simulate">Simulate (bar-by-bar replay)</option>
+              </select>
+            </label>
+            <label class="training__field">
+              <span>Days</span>
+              <input type="number" id="training-days" value="30" min="1" max="365" />
+            </label>
+            <label class="training__field training__field--checkbox">
+              <input type="checkbox" id="training-include-live" />
+              <span>Include live feedback</span>
+            </label>
+            <button class="chart-btn chart-btn--primary" id="training-start" type="button">Start training</button>
+            <button class="chart-btn" id="training-run-simulate" type="button" title="Runs a simulate job using the just-optimized params' symbol/days">Then run simulated trades</button>
+          </div>
+          <div class="training__analysis" id="training-analysis">
+            <h3 class="training__analysis-title">Simulated trades vs prediction</h3>
+            <div class="training__analysis-summary" id="training-analysis-summary">
+              <p class="training__analysis-empty">Run a "simulate" job to see the predicted-vs-actual breakdown here.</p>
+            </div>
+            <div class="training__analysis-table-wrap">
+              <table class="training__analysis-table">
+                <thead>
+                  <tr>
+                    <th>Time</th><th>Side</th><th>Predicted</th><th>Actual exit</th><th>&Delta;</th><th>R</th><th>Result</th>
+                  </tr>
+                </thead>
+                <tbody id="training-analysis-body"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
         <div class="training__status">
           <span class="training__status-badge" id="training-status-badge">idle</span>
@@ -136,6 +199,10 @@
 
       <section class="panel journal">
         <h2 class="panel__title">Trade journal</h2>
+        <p class="panel__subtitle">hover a row for the predicted direction/price vs the actual outcome</p>
+        <div id="performance" class="performance">
+          <div class="performance__empty">No closed trades yet</div>
+        </div>
         <table class="journal__table">
           <thead>
             <tr>
@@ -160,6 +227,7 @@
   <script type="module" src="js/chart.js"></script>
   <script type="module" src="js/panels.js"></script>
   <script type="module" src="js/training.js"></script>
+  <script type="module" src="js/trade.js"></script>
   <script type="module" src="js/app.js"></script>
   <script type="module" src="js/wizard.js"></script>
 </body>

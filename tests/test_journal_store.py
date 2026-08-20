@@ -132,3 +132,61 @@ def test_get_trades_returns_reflection_json(tmp_path):
     assert "reflection" in trades[0]
     assert trades[0]["reflection"]["outcome"] == "WIN"
     assert trades[0]["reflection"]["setup_tag"] == "trend_pullback_poc"
+
+
+def test_record_trade_defaults_opened_at_to_closed_at_when_omitted(tmp_path):
+    db = str(tmp_path / "journal.sqlite3")
+    j = Journal(db)
+    j.record_trade(_make_decision(), _make_reflection(), "US500")
+    trades = j.get_trades()
+    assert trades[0]["opened_at"] == trades[0]["closed_at"]
+
+
+def test_record_trade_accepts_explicit_opened_at(tmp_path):
+    db = str(tmp_path / "journal.sqlite3")
+    j = Journal(db)
+    j.record_trade(_make_decision(), _make_reflection(), "US500", opened_at="2026-01-01T00:00:00+00:00")
+    trades = j.get_trades()
+    assert trades[0]["opened_at"] == "2026-01-01T00:00:00+00:00"
+    assert trades[0]["opened_at"] != trades[0]["closed_at"]
+
+
+def test_get_trades_includes_decision(tmp_path):
+    db = str(tmp_path / "journal.sqlite3")
+    j = Journal(db)
+    j.record_trade(_make_decision(), _make_reflection(), "US500")
+    trades = j.get_trades()
+    assert trades[0]["decision"] is not None
+    assert trades[0]["decision"]["action"] == "BUY"
+    assert trades[0]["decision"]["take_profit"] == 102.0
+
+
+def test_aggregate_stats_includes_total_pnl(tmp_path):
+    db = str(tmp_path / "journal.sqlite3")
+    j = Journal(db)
+    j.record_trade(
+        _make_decision(),
+        TradeReflection(outcome="WIN", r_multiple=1.5, what_matched_expectation="", what_diverged="",
+                        lesson="", setup_tag="trend_pullback_poc", pnl=42.5),
+        "US500",
+    )
+    j.record_trade(
+        _make_decision(),
+        TradeReflection(outcome="LOSS", r_multiple=-1.0, what_matched_expectation="", what_diverged="",
+                        lesson="", setup_tag="range_fade_vah", pnl=-10.0),
+        "US500",
+    )
+    stats = j.aggregate_stats()
+    assert stats["total_pnl"] == pytest.approx(32.5)
+
+
+def test_trade_reflection_pnl_defaults_and_roundtrips(tmp_path):
+    db = str(tmp_path / "journal.sqlite3")
+    j = Journal(db)
+    reflection = TradeReflection(
+        outcome="WIN", r_multiple=1.5, what_matched_expectation="", what_diverged="",
+        lesson="", setup_tag="trend_pullback_poc", pnl=42.5,
+    )
+    j.record_trade(_make_decision(), reflection, "US500")
+    trades = j.get_trades()
+    assert trades[0]["reflection"]["pnl"] == 42.5

@@ -29,6 +29,35 @@ services:
     networks:
       - 58-project
 
+  # The actual trading loop (execution/live_runner.py via scripts/run_live.py).
+  # Previously there was no service for this at all — `docker compose up`
+  # started the API and dashboard but never anything that evaluates signals
+  # or places orders, so a Docker deployment never traded automatically no
+  # matter how auto-mode was configured in the dashboard. `restart:
+  # unless-stopped` plus live_runner's own internal MCP-reconnect retry loop
+  # (see run_live() in execution/live_runner.py) means a dropped connection
+  # to the cTrader desktop app — or this container starting before that app
+  # is ready — no longer permanently stops trading.
+  #
+  # This talks to the same host-machine cTrader desktop app as `api` (same
+  # host.docker.internal:9876 MCP URL), so it must run on the same host
+  # where that app is running, same as `api` already required.
+  live_runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.live_runner
+    container_name: 58-cTraderAnthropicBot-live-runner
+    volumes:
+      - ./config:/app/config:ro
+      - ./.env:/app/.env:ro
+      - ./data:/app/data
+      - ./trade_journal.sqlite3:/app/trade_journal.sqlite3
+    environment:
+      - CTRADER_MCP_URL=http://host.docker.internal:9876/mcp/
+    restart: unless-stopped
+    networks:
+      - 58-project
+
 networks:
   58-project:
     driver: bridge

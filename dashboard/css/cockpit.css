@@ -272,6 +272,71 @@ html, body {
   cursor: not-allowed;
 }
 
+.chart-btn--danger {
+  background: rgba(226, 87, 76, 0.16);
+  color: var(--short);
+  border-color: var(--short);
+}
+
+.chart-btn--danger:hover {
+  background: var(--short);
+  color: #1a0d0b;
+}
+
+.live-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.live-status__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.live-status__outcome {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--hairline-bright);
+}
+
+.live-status__outcome--order_placed {
+  color: var(--long);
+  border-color: var(--long);
+}
+
+.live-status__outcome--no_signal,
+.live-status__outcome--no_data {
+  color: var(--text-muted);
+}
+
+.live-status__outcome--auto_disabled,
+.live-status__outcome--strategy_filtered,
+.live-status__outcome--kill_switch,
+.live-status__outcome--sizing_failed,
+.live-status__outcome--no_vpp {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+.live-status__detail {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.live-status__time {
+  color: var(--text-faint);
+  font-size: 0.65rem;
+}
+
 .chart-select {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.65rem;
@@ -470,6 +535,94 @@ html, body {
   color: var(--text-faint);
 }
 
+/* ── Predicted trade (one-click "execute predicted trade") ──────────────── */
+.predicted-trade {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.predicted-trade__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.predicted-trade__direction {
+  font-family: 'Space Grotesk', 'Arial Narrow', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline-bright);
+  color: var(--text-faint);
+}
+
+.predicted-trade__direction--long {
+  color: var(--long);
+  border-color: var(--long);
+  background: rgba(63, 190, 142, 0.1);
+}
+
+.predicted-trade__direction--short {
+  color: var(--short);
+  border-color: var(--short);
+  background: rgba(226, 87, 76, 0.1);
+}
+
+.predicted-trade__direction--flat {
+  color: var(--text-faint);
+}
+
+.predicted-trade__likelihood {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.predicted-trade__prices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.predicted-trade__price {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--hairline);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.68rem;
+}
+
+.predicted-trade__price:last-child {
+  border-bottom: none;
+}
+
+.predicted-trade__price span:first-child {
+  color: var(--text-faint);
+}
+
+.predicted-trade__price span:last-child {
+  color: var(--text);
+}
+
+.predicted-trade__note {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.6rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.predicted-trade__status {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.6rem;
+  line-height: 1.5;
+  color: var(--cyan);
+  min-height: 1em;
+}
+
 /* ── Breadth ── */
 .breadth__row {
   display: flex;
@@ -589,53 +742,125 @@ html, body {
   color: var(--text-muted);
 }
 
-.position__item {
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.position__item:last-child {
-  border-bottom: none;
-}
-
 .position__row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
   margin-bottom: 0.35rem;
-}
-
-.position__row:last-child {
-  margin-bottom: 0;
 }
 
 .position__pnl {
   font-weight: 500;
 }
 
-.position__close-btn {
+/* ── Performance summary strip (§15.5) ── */
+.performance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 0.6rem;
+  margin: 0.8rem 0 1rem;
+}
+
+.performance__empty {
+  color: var(--text-faint);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+
+.performance__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--panel-alt, rgba(255, 255, 255, 0.02));
+}
+
+.performance__label {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.6rem;
-  letter-spacing: 0.03em;
-  padding: 0.25rem 0.55rem;
-  border-radius: 4px;
-  border: 1px solid var(--hairline-bright);
-  background: var(--panel-raised);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.performance__value {
+  font-family: 'Space Grotesk', 'Arial Narrow', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
   color: var(--text-muted);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.position__close-btn:hover {
-  color: var(--short);
-  border-color: var(--short);
-  background: rgba(226, 87, 76, 0.12);
+/* ── Orderflow footprint (§15.2 candle-detail buy/sell breakdown) ── */
+.footprint__empty {
+  color: var(--text-faint);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
 }
 
-.position__close-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.footprint__meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
+.footprint__levels {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.footprint__row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr 1fr 2.6rem;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.62rem;
+}
+
+.footprint__row--demand {
+  background: rgba(232, 163, 61, 0.12);
+}
+
+.footprint__price {
+  color: var(--text-muted);
+}
+
+.footprint__bar {
+  display: block;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.footprint__bar--sell {
+  background: var(--short);
+  opacity: 0.7;
+  justify-self: end;
+}
+
+.footprint__bar--buy {
+  background: var(--long);
+  opacity: 0.7;
+}
+
+.footprint__delta {
+  text-align: right;
+  font-weight: 600;
+}
+
+.footprint__note {
+  margin-top: 0.5rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.58rem;
+  line-height: 1.5;
+  color: var(--text-faint);
 }
 
 /* ── Journal ── */
@@ -653,6 +878,14 @@ html, body {
   border-bottom: 1px solid var(--hairline);
 }
 
+.journal__table tbody tr {
+  cursor: help; /* hover for predicted-vs-actual tooltip, see app.js's journalRowTooltip() */
+}
+
+.journal__table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .journal__table th {
   font-weight: 400;
   color: var(--text-faint);
@@ -667,13 +900,126 @@ html, body {
 }
 
 /* ── Training panel ── */
+.training__body {
+  display: flex;
+  align-items: stretch;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .training__body {
+    flex-direction: column;
+  }
+}
+
 .training__controls {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
+  align-content: flex-start;
   gap: 0.9rem;
-  margin-bottom: 0.85rem;
+  flex: 0 0 66%;
+  max-width: 66%;
 }
+
+@media (max-width: 900px) {
+  .training__controls {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+}
+
+/* ── Simulated trades vs prediction analysis window ──────────────────────
+ * Sits beside the (now 2/3-width) controls block — a data-science-style
+ * readout of the last "simulate" run: predicted direction/price per trade
+ * vs the actual exit, plus aggregate accuracy stats. */
+.training__analysis {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.training__analysis-title {
+  font-family: 'Space Grotesk', 'Arial Narrow', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.training__analysis-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.training__analysis-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.training__analysis-stat span {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+.training__analysis-stat label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.55rem;
+  color: var(--text-faint);
+}
+
+.training__analysis-empty {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+}
+
+.training__analysis-table-wrap {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.training__analysis-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.62rem;
+}
+
+.training__analysis-table th,
+.training__analysis-table td {
+  text-align: left;
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+
+.training__analysis-table th {
+  font-weight: 400;
+  color: var(--text-faint);
+  position: sticky;
+  top: 0;
+  background: var(--panel-raised);
+}
+
+.training__side--buy { color: var(--long); font-weight: 700; }
+.training__side--sell { color: var(--short); font-weight: 700; }
+.training__r--pos { color: var(--long); }
+.training__r--neg { color: var(--short); }
+.training__result--correct { color: var(--long); }
+.training__result--wrong { color: var(--text-muted); }
 
 .training__field {
   display: flex;
