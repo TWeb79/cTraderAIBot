@@ -47,11 +47,17 @@ KILL_SWITCH_PATH = PROJECT_ROOT / "data" / "cache" / ".kill_switch"
 # — the dashboard's one-click "execute predicted trade" button queues a
 # request here rather than placing the order itself; see POST /api/manual-trade.
 MANUAL_TRADE_REQUEST_PATH = PROJECT_ROOT / "data" / "cache" / ".manual_trade_request.json"
+# Same convention, read by live_runner.py's load_risk_control() /
+# _apply_risk_control_overrides() — dashboard-configured trailing-stop
+# trigger/distance and margin-% position sizing, overriding config.yaml's
+# risk.trailing_stop / risk.position_sizing_mode /
+# risk.margin_pct_of_free_margin only for the fields explicitly set here.
+RISK_CONTROL_PATH = PROJECT_ROOT / "data" / "cache" / ".risk_control.json"
 
 # Bump both of these with every batch of changes that reaches the dashboard
 # — kept in sync with implementationplan.md's own **Version:** header so the
 # app version visibly moves instead of sitting frozen at "0.1.0" forever.
-APP_VERSION = "0.7.4"
+APP_VERSION = "0.7.5"
 APP_BUILD_TIME = "2026-08-20"
 
 app = FastAPI(title="cTrader Bot Dashboard API", version=APP_VERSION)
@@ -92,6 +98,55 @@ TRAINING = {
 # _simulation_trade_records()/_simulation_summary() and GET /api/training/trades.
 LAST_SIMULATION: dict = {"trades": [], "summary": None, "finished_at": None}
 AUTO = {"enabled": False, "strategy": default_strategy_name(), "use_trained": False}
+
+
+def _default_risk_control() -> dict:
+    """Seeds the in-memory RISK_CONTROL state (and thus GET /api/risk-control's
+    initial response) from config.yaml's current values, so the dashboard
+    shows real numbers on first load rather than blanks/zeros.
+
+    If RISK_CONTROL_PATH already exists on disk — i.e. a human previously
+    saved an override via POST /api/risk-control/set, in this process
+    lifetime or an earlier one — its values take precedence over
+    config.yaml's. execution/live_runner.py's load_risk_control() reads that
+    file directly and is the actual source of truth for live trading, so
+    without this, restarting only the dashboard API (not the live runner)
+    would make the dashboard *display* config.yaml's defaults while the live
+    runner kept using the previously-saved override underneath — a display/
+    reality mismatch. Any field the file doesn't set (or the file being
+    missing/malformed) still falls back to config.yaml, same as before."""
+    risk = SETTINGS.get("risk", {})
+    trailing = risk.get("trailing_stop", {}) or {}
+    control = {
+        "trailing_stop": {
+            "enabled": bool(trailing.get("enabled", False)),
+            "trigger_pips": float(trailing.get("trigger_pips", 3.0)),
+            "lock_pips": float(trailing.get("lock_pips", 1.4)),
+        },
+        "position_sizing_mode": risk.get("position_sizing_mode", "risk_pct"),
+        "margin_pct_of_free_margin": float(risk.get("margin_pct_of_free_margin", 5.0)),
+    }
+
+    try:
+        saved = json.loads(RISK_CONTROL_PATH.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        saved = None
+
+    if isinstance(saved, dict):
+        saved_trailing = saved.get("trailing_stop")
+        if isinstance(saved_trailing, dict):
+            for key in ("enabled", "trigger_pips", "lock_pips"):
+                if key in saved_trailing:
+                    control["trailing_stop"][key] = saved_trailing[key]
+        if saved.get("position_sizing_mode") in ("risk_pct", "margin_pct"):
+            control["position_sizing_mode"] = saved["position_sizing_mode"]
+        if saved.get("margin_pct_of_free_margin") is not None:
+            control["margin_pct_of_free_margin"] = float(saved["margin_pct_of_free_margin"])
+
+    return control
+
+
+RISK_CONTROL = _default_risk_control()
 
 
 def _now() -> str:
@@ -658,6 +713,50 @@ async def set_auto(payload: dict):
 
     await broadcast({"type": "auto", "auto": dict(AUTO)})
     return {"auto": dict(AUTO)}
+
+
+# ── Risk control: trailing-stop trigger/distance, margin-% position sizing ──
+#
+# execution/live_runner.py's trailing-stop logic (§15.8) and margin_pct
+# position-sizing mode (§15.6) were always config.yaml-only — no dashboard
+# control existed, so changing either required editing config.yaml and
+# restarting the live runner. This mirrors the auto-mode control's
+# file-based-IPC pattern: writes RISK_CONTROL_PATH, which
+# live_runner.load_risk_control()/_apply_risk_control_overrides() reads
+# fresh every cycle, so a change here takes effect on the next cycle
+# without a restart.
+
+@app.get("/api/risk-control")
+async def get_risk_control():
+    return {"risk_control": dict(RISK_CONTROL)}
+
+
+@app.post("/api/risk-control/set")
+async def set_risk_control(payload: dict):
+    trailing_payload = payload.get("trailing_stop")
+    if isinstance(trailing_payload, dict):
+        trailing = dict(RISK_CONTROL["trailing_stop"])
+        if "enabled" in trailing_payload:
+            trailing["enabled"] = bool(trailing_payload["enabled"])
+        if "trigger_pips" in trailing_payload:
+            trailing["trigger_pips"] = float(trailing_payload["trigger_pips"])
+        if "lock_pips" in trailing_payload:
+            trailing["lock_pips"] = float(trailing_payload["lock_pips"])
+        RISK_CONTROL["trailing_stop"] = trailing
+
+    if payload.get("position_sizing_mode") in ("risk_pct", "margin_pct"):
+        RISK_CONTROL["position_sizing_mode"] = payload["position_sizing_mode"]
+    if payload.get("margin_pct_of_free_margin") is not None:
+        RISK_CONTROL["margin_pct_of_free_margin"] = float(payload["margin_pct_of_free_margin"])
+
+    try:
+        RISK_CONTROL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        RISK_CONTROL_PATH.write_text(json.dumps(dict(RISK_CONTROL)))
+    except OSError as e:
+        print(f"[warn] failed to write risk-control file: {e}")
+
+    await broadcast({"type": "risk_control", "risk_control": dict(RISK_CONTROL)})
+    return {"risk_control": dict(RISK_CONTROL)}
 
 
 # ── Kill switch (dashboard-driven) ──────────────────────────────────────────

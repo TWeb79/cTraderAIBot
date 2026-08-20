@@ -11,7 +11,7 @@ to summarize the trade journal into written analysis.
 
 ## Version
 
-**0.7.4** — Built 2026-08-20
+**0.7.5** — Built 2026-08-20
 
 ## Safety
 
@@ -152,6 +152,14 @@ Then open `http://localhost:8058`.
   `execution/live_runner.py` process is currently running — that alone is
   the most common reason nothing is trading; see Usage/Docker above to
   start one.
+- **Position & trailing** — dashboard control over the trailing-stop
+  trigger/distance (§15.8) and margin-%-of-free-margin position sizing
+  (§15.6), previously config.yaml-only. Saving writes
+  `data/cache/.risk_control.json`, which `execution/live_runner.py` reads
+  fresh every cycle — a change here takes effect on the live runner's next
+  cycle, no restart needed. Fields this panel doesn't expose (the trailing
+  stop's TP-extend settings, `risk_per_trade_pct`, ...) always come from
+  `config.yaml` unchanged.
 - **Signal feed / Open position / Trade journal** — unchanged from earlier
   versions.
 
@@ -180,6 +188,16 @@ In addition to `/api/health`, `/api/version`, `/api/state`, `/api/journal`,
 - `GET /api/kill-switch` / `POST /api/kill-switch/set {"active": bool}` —
   read/write `data/cache/.kill_switch` from the dashboard (previously only
   settable by a human directly touching the file).
+- `GET /api/risk-control` / `POST /api/risk-control/set` — read/write the
+  dashboard's trailing-stop trigger/distance and margin-%-of-free-margin
+  sizing overrides (`{"trailing_stop": {"enabled", "trigger_pips",
+  "lock_pips"}, "position_sizing_mode": "risk_pct"|"margin_pct",
+  "margin_pct_of_free_margin"}`). Writing updates
+  `data/cache/.risk_control.json` (see below) and broadcasts the new state
+  over the WebSocket as `{"type": "risk_control", ...}`. On dashboard API
+  restart, `GET /api/risk-control`'s initial response prefers whatever was
+  last saved to that file over config.yaml's defaults, so the displayed
+  values don't drift from what the live runner is actually using.
 
 ### Auto-mode gating (dashboard ↔ live runner)
 
@@ -191,6 +209,18 @@ pattern already used by the kill switch. `POST /api/auto/set` writes it;
 missing, unreadable, or malformed, the live runner behaves exactly as before
 this feature existed (every risk-approved signal is taken) — the dashboard
 is opt-in and its absence never silently pauses live trading.
+
+### Risk control (dashboard ↔ live runner)
+
+Same file-based-IPC pattern, for the trailing-stop trigger/distance and
+margin-% position sizing: `POST /api/risk-control/set` writes
+`data/cache/.risk_control.json`; `live_runner.load_risk_control()` reads it
+once per cycle and `_apply_risk_control_overrides()` merges it onto a
+**copy** of the process-lifetime settings loaded from `config.yaml` — the
+override is applied per-cycle and never mutates that settings object, so
+`config.yaml` itself remains the baseline. A missing/malformed file, or a
+field simply absent from it, means "use `config.yaml` unchanged" for that
+field.
 
 ## Architecture
 

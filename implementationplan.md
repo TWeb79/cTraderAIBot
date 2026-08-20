@@ -1,8 +1,36 @@
 # Implementation Plan — cTrader Anthropic Bot (Project 58)
 
-**Version:** 0.7.4
+**Version:** 0.7.5
 **Date:** 2026-08-19 (original) · **Last reviewed:** 2026-08-20 · **Implementation started:** 2026-08-19
 **Author:** Inventions4All - github:TWeb79
+
+> **v0.7.5 (2026-08-20, implemented):** dashboard control over trailing-stop
+> trigger/distance and margin-% position sizing, on direct user request
+> ("configure trailing trigger and distance and volume in % (free margin)").
+> Full details in new §19. Summary: §15.8's trailing stop and §15.6's
+> margin-%-of-free-margin sizing were always config.yaml-only — changing
+> either meant editing the YAML and restarting the live runner. New
+> `data/cache/.risk_control.json` file-based IPC (same convention as
+> auto-mode control): `GET/POST /api/risk-control...` (dashboard_api.py)
+> read/write it; `execution/live_runner.py`'s new `load_risk_control()` /
+> `_apply_risk_control_overrides()` read it fresh every cycle and merge only
+> the explicitly-set fields onto a **copy** of the process-lifetime settings
+> dict (config.yaml's own values, and every field the dashboard doesn't
+> expose — the trailing stop's `tp_extend_*` fields, `risk_per_trade_pct`,
+> etc. — always pass through unchanged). New "Position & trailing" sidebar
+> panel: trailing-stop enable + trigger (pips profit) + distance (pips from
+> entry), and a toggle for risk_pct vs. margin_pct sizing + volume-as-%-of-
+> free-margin input, with a Save button. Takes effect on the live runner's
+> next cycle — no restart needed.
+>
+> Full test suite: **174/174 passing** (166 + 8 new tests: pure
+> `_apply_risk_control_overrides()` merge/no-mutate coverage,
+> `load_risk_control()` file-IPC coverage, and two `run_one_cycle()`
+> end-to-end tests proving a dashboard-set margin_pct override actually
+> changes a placed order's volume vs. the unmodified config.yaml baseline).
+> New/changed dashboard JS (`risk-control.js`, `api.js`, `app.js`)
+> re-verified as syntactically valid ES modules; `index.html`'s
+> `<section>`/`</section>` tag count re-verified balanced.
 
 > **v0.7.4 (2026-08-20, implemented):** direct follow-up to v0.7.3, on user
 > report "it is not trading yet and i am not sure if the training works."
@@ -2384,3 +2412,110 @@ investigation each time:
 Both are additive and read/write only file-based state that already
 existed in the architecture — no change to the trading decision path
 itself.
+
+## 19. Dashboard control for trailing-stop trigger/distance + margin-% volume (2026-08-20 — implemented, see v0.7.5 changelog above)
+
+Direct user request: "I would like to configure trailing trigger and
+distance and volume in % (free margin)" — asked in response to being given
+a choice between several larger pending items (§16's unified `Trade`
+object, §15.1's ML confidence layer, §15.10's UI polish), so this batch is
+scoped narrowly to exactly that, not a larger refactor.
+
+### 19.1 — What already existed vs. what was missing
+
+§15.6 (margin-%-of-free-margin sizing) and §15.8 (trailing stop) were both
+already fully implemented in `risk/risk_manager.py` and wired into
+`execution/live_runner.py`'s `_execute_trade()` — but only configurable via
+`config/config.yaml`'s `risk.trailing_stop.*` /
+`risk.position_sizing_mode` / `risk.margin_pct_of_free_margin`, which meant
+changing either required editing YAML by hand and restarting the live
+runner process. No dashboard control existed for either, unlike most other
+per-trade behavior (auto-mode, strategy selection) which already had the
+file-based-IPC treatment.
+
+### 19.2 — Design: same file-based IPC pattern as auto-mode control
+
+New `data/cache/.risk_control.json`, read fresh every cycle — deliberately
+the same pattern as `AUTO_CONTROL_PATH`/`.auto_control.json` rather than a
+new mechanism:
+
+- `execution/live_runner.py`: `load_risk_control()` (best-effort read,
+  missing/malformed file degrades to "no override" — identical contract to
+  `load_auto_control()`) plus `_apply_risk_control_overrides(settings,
+  control)`, a **pure function** returning a new settings dict with only
+  the explicitly-present override keys merged onto a copy of
+  `settings["risk"]`. Two properties worth calling out:
+  1. The process-lifetime `settings` dict (loaded once in `run_live()`,
+     also carrying any `--use-trained-params` overrides from
+     `_apply_trained_params()`) is **never mutated** — each cycle computes
+     a fresh `effective_settings` from the current file contents, so a
+     dashboard change takes effect next cycle and a *removed* override
+     correctly reverts to config.yaml, not to whatever was last merged in.
+  2. Only the fields the dashboard actually exposes
+     (`trailing_stop.enabled/trigger_pips/lock_pips`,
+     `position_sizing_mode`, `margin_pct_of_free_margin`) are ever
+     touched — `trailing_stop.tp_extend_trigger_pips` /
+     `tp_extend_pips` / `sl_trail_distance_pips` and every other
+     `risk.*` key always come from config.yaml. This was a deliberate
+     scoping decision (the user asked for trigger/distance/volume, not a
+     general config-override channel), not an oversight — see §19.4 for
+     what a follow-up would need to add if the TP-extend mechanism should
+     also become dashboard-configurable later.
+  `effective_settings = _apply_risk_control_overrides(settings,
+  load_risk_control())` is computed once per `run_one_cycle()` call, before
+  either `_execute_trade()` call site (manual-request path and the
+  automated-signal path both use it).
+- `api/dashboard_api.py`: `GET /api/risk-control` returns the in-memory
+  `RISK_CONTROL` dict, seeded at process startup from config.yaml's
+  current values via `_default_risk_control()` (so the dashboard shows
+  real numbers on first load, not blanks) — not from a possibly-stale
+  override file. `POST /api/risk-control/set` updates `RISK_CONTROL`,
+  writes it to `RISK_CONTROL_PATH`, and broadcasts
+  `{"type": "risk_control", ...}` over the WebSocket (not yet consumed by
+  any live-updating widget — the panel re-fetches via its own Save-button
+  flow — but broadcasting is free and consistent with every other
+  dashboard-state-change endpoint in this file).
+
+### 19.3 — Dashboard UI
+
+New "Position & trailing" sidebar panel (`dashboard/js/risk-control.js`,
+between "Auto trading" and "Predicted trade" in `index.html`): a trailing-
+stop enable checkbox, "Trigger (pips profit)" and "Distance (pips from
+entry)" number inputs (mapping to `trigger_pips`/`lock_pips` — the plan's
+own §15.8 terms "trigger" and "lock" were relabeled "trigger"/"distance"
+here to match the user's own wording), a "Size by % of free margin"
+checkbox (toggles `position_sizing_mode` between `"risk_pct"` and
+`"margin_pct"`), a "Volume (% of free margin)" input, and a single Save
+button — no auto-save on every keystroke, matching this dashboard's
+existing pattern of explicit save actions (POST /api/auto/set is the one
+exception, firing on toggle/select `change`, but that's a simpler
+binary/enum control; a multi-field numeric form benefits from one atomic
+save). The hint line under the button explicitly says changes apply "on
+the live runner's next cycle — no restart needed" so the user doesn't
+wonder whether they need to restart anything.
+
+### 19.4 — Not done in this batch (deliberately out of scope)
+
+- The trailing stop's TP-extend mechanism
+  (`tp_extend_trigger_pips`/`tp_extend_pips`/`sl_trail_distance_pips`) is
+  not dashboard-configurable — only the primary profit-lock trigger/
+  distance pair the user asked for. Extending the same override pattern to
+  these three fields would be a small, mechanical follow-up if wanted
+  (add them to `_apply_risk_control_overrides`'s `control_trailing` key
+  list, the API payload handling, and three more form fields).
+- No validation/clamping on the dashboard inputs beyond `min="0"` — e.g.
+  nothing stops setting `margin_pct_of_free_margin` to an unreasonably
+  large value. `margin_based_volume()` in `risk/risk_manager.py` already
+  caps the resulting *volume* at the symbol's `maxVolume` regardless, so
+  this can't directly cause an oversized order, but a clearly-wrong
+  percentage wouldn't be flagged in the UI itself.
+- ~~`RISK_CONTROL`'s in-memory state resets to config.yaml's defaults on a
+  dashboard-API-only restart~~ — fixed in this same batch:
+  `_default_risk_control()` now reads `RISK_CONTROL_PATH` first and, for
+  any field the on-disk override sets, prefers that over config.yaml, only
+  falling back to config.yaml for fields the file doesn't set (or if the
+  file is missing/malformed). So a dashboard-API restart re-seeds
+  `RISK_CONTROL` to match whatever was last actually saved — the same
+  values `execution/live_runner.py` is already using — instead of silently
+  reverting the *displayed* values to config.yaml while live trading kept
+  using the old override underneath.

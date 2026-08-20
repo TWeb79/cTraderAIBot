@@ -125,6 +125,17 @@ export async function setKillSwitch(active) {
   return post('/api/kill-switch/set', { active });
 }
 
+/** Trailing-stop trigger/distance + margin-% position sizing, overriding
+ * config.yaml's risk.trailing_stop / risk.position_sizing_mode /
+ * risk.margin_pct_of_free_margin without restarting the live runner. */
+export async function fetchRiskControl() {
+  return get('/api/risk-control');
+}
+
+export async function setRiskControl(payload) {
+  return post('/api/risk-control/set', payload);
+}
+
 /** §15.2 orderflow footprint — buy/sell tick-volume by price level within a
  * single candle, built from finer sub-bars (see the endpoint's own docstring
  * for why this is a proxy, not true bid/ask depth). */

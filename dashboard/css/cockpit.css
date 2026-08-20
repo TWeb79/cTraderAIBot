@@ -448,7 +448,8 @@ html, body {
   color: var(--text-muted);
 }
 
-.auto-controls__row select {
+.auto-controls__row select,
+.auto-controls__row input[type="number"] {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.65rem;
   padding: 0.3rem 0.45rem;
@@ -457,6 +458,12 @@ html, body {
   background: var(--panel-raised);
   color: var(--text);
   max-width: 60%;
+}
+
+.risk-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .auto-controls__row--checkbox {

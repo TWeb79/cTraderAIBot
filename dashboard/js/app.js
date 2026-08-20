@@ -15,6 +15,7 @@ import { initAutoControls, initSessionClock, renderDatapoints, renderLearningGau
 import { initTrainingPanel, handleTrainingBroadcast } from './training.js';
 import { renderPrediction, initManualTradePanel } from './trade.js';
 import { initLiveStatusPanel } from './live-status.js';
+import { initRiskControlPanel } from './risk-control.js';
 
 const C = {
   long: '#3FBE8E',
@@ -328,6 +329,7 @@ async function init() {
   initTrainingPanel();
   initManualTradePanel();
   initLiveStatusPanel();
+  initRiskControlPanel();
   refreshLearningSparkline();
   setInterval(refreshLearningSparkline, 60000);
   refreshPerformance(performanceEl);

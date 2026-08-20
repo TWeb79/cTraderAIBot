@@ -2,7 +2,7 @@ FROM debian:12-slim
 
 LABEL maintainer="Inventions4All - github:TWeb79"
 LABEL description="cTrader Anthropic Bot - API Service (Project 58)"
-LABEL version="0.7.4"
+LABEL version="0.7.5"
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1

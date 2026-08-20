@@ -19,6 +19,8 @@ from ctrader_bot.execution.live_runner import (
     remove_kill_switch,
     run_one_cycle,
     run_live,
+    _apply_risk_control_overrides,
+    load_risk_control,
 )
 from ctrader_bot.indicators.regime import Regime
 from ctrader_bot.journal.store import Journal
@@ -961,3 +963,132 @@ async def test_execute_trade_writes_no_vpp_status(tmp_path, tmp_journal, risk_ma
 
     data = json.loads(Path(status_path).read_text())
     assert data["outcome"] == "no_vpp"
+
+
+# ── Risk control (trailing trigger/distance, margin-% volume sizing) ───────
+
+def test_apply_risk_control_overrides_merges_trailing_fields():
+    settings = _settings()
+    settings["risk"]["trailing_stop"] = {
+        "enabled": False, "trigger_pips": 3.0, "lock_pips": 1.4,
+        "tp_extend_trigger_pips": 5.0, "tp_extend_pips": 5.0, "sl_trail_distance_pips": 3.0,
+    }
+    control = {"trailing_stop": {"enabled": True, "trigger_pips": 10.0, "lock_pips": 2.0}}
+
+    merged = _apply_risk_control_overrides(settings, control)
+
+    assert merged["risk"]["trailing_stop"]["enabled"] is True
+    assert merged["risk"]["trailing_stop"]["trigger_pips"] == 10.0
+    assert merged["risk"]["trailing_stop"]["lock_pips"] == 2.0
+    # Fields the dashboard doesn't expose (tp_extend_*) pass through from
+    # config.yaml unchanged, not wiped out by a partial override.
+    assert merged["risk"]["trailing_stop"]["tp_extend_trigger_pips"] == 5.0
+    assert merged["risk"]["trailing_stop"]["tp_extend_pips"] == 5.0
+    # The process-lifetime settings dict itself is never mutated.
+    assert settings["risk"]["trailing_stop"]["enabled"] is False
+
+
+def test_apply_risk_control_overrides_position_sizing_and_margin_pct():
+    settings = _settings()
+    control = {"position_sizing_mode": "margin_pct", "margin_pct_of_free_margin": 12.5}
+
+    merged = _apply_risk_control_overrides(settings, control)
+
+    assert merged["risk"]["position_sizing_mode"] == "margin_pct"
+    assert merged["risk"]["margin_pct_of_free_margin"] == 12.5
+    assert settings["risk"].get("position_sizing_mode") != "margin_pct"
+
+
+def test_apply_risk_control_overrides_partial_control_only_touches_given_keys():
+    settings = _settings()
+    settings["risk"]["position_sizing_mode"] = "risk_pct"
+    control = {"trailing_stop": {"enabled": True}}  # position sizing untouched
+
+    merged = _apply_risk_control_overrides(settings, control)
+
+    assert merged["risk"]["trailing_stop"]["enabled"] is True
+    assert merged["risk"]["position_sizing_mode"] == "risk_pct"
+
+
+def test_apply_risk_control_overrides_empty_control_returns_same_object():
+    settings = _settings()
+    assert _apply_risk_control_overrides(settings, {}) is settings
+
+
+def test_load_risk_control_missing_file_returns_empty_dict(tmp_path):
+    path = str(tmp_path / ".risk_control.json")
+    with patch("ctrader_bot.execution.live_runner.RISK_CONTROL_PATH", path):
+        assert load_risk_control() == {}
+
+
+def test_load_risk_control_reads_written_file(tmp_path):
+    path = tmp_path / ".risk_control.json"
+    path.write_text(json.dumps({"position_sizing_mode": "margin_pct"}))
+    with patch("ctrader_bot.execution.live_runner.RISK_CONTROL_PATH", str(path)):
+        assert load_risk_control() == {"position_sizing_mode": "margin_pct"}
+
+
+@pytest.mark.asyncio
+async def test_run_one_cycle_applies_risk_control_margin_pct_override(tmp_path, tmp_journal, risk_manager):
+    """A dashboard-set risk-control override must actually reach
+    _execute_trade for the automated signal path — not just be readable,
+    but change the placed order's volume."""
+    settings = _settings()  # position_sizing_mode not set in config -> risk_pct baseline
+    mcp = AsyncMock()
+    mcp.get_trendbars.return_value = _make_bars(100)
+    mcp.get_symbol_details.return_value = {"pipSize": 0.01, "minVolume": 0.01, "maxVolume": 100, "volumeStep": 0.01}
+    mcp.get_balance.return_value = {"equity": 10000.0, "balance": 10000.0, "freeMargin": 1000.0}
+    mcp.get_deals.return_value = [
+        {"symbolName": "US500", "pips": 100.0, "filledVolume": 1.0, "grossProfit": 100.0},
+    ]
+    mcp.calculate_margin.return_value = {"margin": 500.0}
+    mcp.place_market_order.return_value = {"positionId": 42}
+    mcp.get_positions.return_value = []
+
+    signal_bars = pd.DataFrame([
+        {"timestamp": b.timestamp, "close": b.close} for b in _make_bars(100)
+    ])
+    risk_control = {"position_sizing_mode": "margin_pct", "margin_pct_of_free_margin": 5.0}
+    with patch("ctrader_bot.execution.live_runner.prepare_backtest_bars", return_value=signal_bars), \
+         patch("ctrader_bot.execution.live_runner.evaluate_bar", return_value=_fixed_signal()), \
+         patch("ctrader_bot.execution.live_runner.load_auto_control", return_value={}), \
+         patch("ctrader_bot.execution.live_runner.load_risk_control", return_value=risk_control), \
+         patch("ctrader_bot.execution.live_runner.asyncio.sleep", new=AsyncMock()):
+        await run_one_cycle(mcp, tmp_journal, risk_manager, "US500", "M5", "M1", settings, dry_run=False)
+
+    order_args = mcp.place_market_order.call_args.kwargs
+    # risk_pct volume would be capped at max_volume=100; margin cap =
+    # (1000 * 5%) / 500 = 0.1 lot -> the smaller (margin) wins, proving the
+    # override reached sizing, not just settings.
+    assert order_args["volume"] == pytest.approx(0.1)
+
+
+@pytest.mark.asyncio
+async def test_run_one_cycle_no_risk_control_file_is_unchanged(tmp_path, tmp_journal, risk_manager):
+    """No override file present (no dashboard running, or nothing saved
+    yet) must behave exactly as before this feature existed: risk_pct
+    sizing from config.yaml, untouched."""
+    settings = _settings()
+    mcp = AsyncMock()
+    mcp.get_trendbars.return_value = _make_bars(100)
+    mcp.get_symbol_details.return_value = {"pipSize": 0.01, "minVolume": 0.01, "maxVolume": 100, "volumeStep": 0.01}
+    mcp.get_balance.return_value = {"equity": 10000.0, "balance": 10000.0}
+    mcp.get_deals.return_value = [
+        {"symbolName": "US500", "pips": 100.0, "filledVolume": 1.0, "grossProfit": 100.0},
+    ]
+    mcp.place_market_order.return_value = {"positionId": 43}
+    mcp.get_positions.return_value = []
+
+    signal_bars = pd.DataFrame([
+        {"timestamp": b.timestamp, "close": b.close} for b in _make_bars(100)
+    ])
+    with patch("ctrader_bot.execution.live_runner.prepare_backtest_bars", return_value=signal_bars), \
+         patch("ctrader_bot.execution.live_runner.evaluate_bar", return_value=_fixed_signal()), \
+         patch("ctrader_bot.execution.live_runner.load_auto_control", return_value={}), \
+         patch("ctrader_bot.execution.live_runner.load_risk_control", return_value={}), \
+         patch("ctrader_bot.execution.live_runner.asyncio.sleep", new=AsyncMock()):
+        await run_one_cycle(mcp, tmp_journal, risk_manager, "US500", "M5", "M1", settings, dry_run=False)
+
+    order_args = mcp.place_market_order.call_args.kwargs
+    # risk_pct sizing, capped at max_volume=100 (no margin cap applied).
+    assert order_args["volume"] == pytest.approx(100.0)

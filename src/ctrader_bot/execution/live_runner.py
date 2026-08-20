@@ -175,6 +175,66 @@ def load_auto_control() -> dict[str, Any]:
         return {}
 
 
+# ── Dashboard risk control (trailing stop trigger/distance, margin-%
+#    position sizing) — file-based IPC ──────────────────────────────────────
+#
+# Same convention/rationale as AUTO_CONTROL_PATH above: the dashboard API
+# writes this from POST /api/risk-control/set; it's read fresh every cycle
+# so a change in the dashboard takes effect on the next cycle without
+# restarting the live runner. config.yaml's risk.trailing_stop /
+# risk.position_sizing_mode / risk.margin_pct_of_free_margin remain the
+# baseline — a missing/unreadable file, or a key simply absent from it,
+# means "use config.yaml unchanged" for that specific field. Only the
+# fields this file actually sets are overridden; everything else (e.g. the
+# risk.trailing_stop.tp_extend_* fields, risk_per_trade_pct) always comes
+# from config.yaml — this is deliberately scoped to what the dashboard UI
+# exposes, not a general config override channel.
+RISK_CONTROL_PATH = str(_project_root() / "data" / "cache" / ".risk_control.json")
+
+
+def load_risk_control() -> dict[str, Any]:
+    """Best-effort read of the dashboard's risk-control override file. Never
+    raises — a missing or malformed file is treated as 'no override'."""
+    try:
+        with open(RISK_CONTROL_PATH) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def _apply_risk_control_overrides(settings: dict[str, Any], control: dict[str, Any]) -> dict[str, Any]:
+    """Returns a NEW settings dict with dashboard-configured risk overrides
+    merged on top of config.yaml's values — the passed-in `settings` (the
+    one process-lifetime dict loaded once in run_live()) is never mutated,
+    so an override only ever affects the current cycle's _execute_trade
+    call, never config.yaml's own baseline. Only keys explicitly present in
+    `control` are overridden; every other risk.* key (trailing_stop's
+    tp_extend_* fields, risk_per_trade_pct, enforce_fixed_rr, ...) always
+    passes through from config.yaml unchanged.
+    """
+    if not control:
+        return settings
+    merged = dict(settings)
+    risk = dict(merged.get("risk", {}))
+
+    control_trailing = control.get("trailing_stop")
+    if isinstance(control_trailing, dict):
+        trailing = dict(risk.get("trailing_stop", {}) or {})
+        for key in ("enabled", "trigger_pips", "lock_pips"):
+            if key in control_trailing:
+                trailing[key] = control_trailing[key]
+        risk["trailing_stop"] = trailing
+
+    if "position_sizing_mode" in control:
+        risk["position_sizing_mode"] = control["position_sizing_mode"]
+    if "margin_pct_of_free_margin" in control:
+        risk["margin_pct_of_free_margin"] = control["margin_pct_of_free_margin"]
+
+    merged["risk"] = risk
+    return merged
+
+
 # ── Manual trade requests (one-click "execute predicted trade" button) ─────
 #
 # The dashboard's prediction panel writes this file when the user clicks the
@@ -611,6 +671,14 @@ async def run_one_cycle(mcp: CTraderMCPClient, journal: Journal,
         risk_manager.start_new_session(session_date, session_equity)
         print(f"[session] new session {session_date}: day_start_equity={session_equity}")
 
+    # Dashboard-configured trailing-stop trigger/distance and margin-%
+    # position sizing (GET/POST /api/risk-control...) — read fresh each
+    # cycle, same file-based-IPC pattern as auto-mode control above. Applied
+    # to a fresh copy of settings (see _apply_risk_control_overrides), never
+    # mutating the process-lifetime `settings` loaded from config.yaml, so a
+    # dashboard toggle only ever affects this cycle's trade(s).
+    effective_settings = _apply_risk_control_overrides(settings, load_risk_control())
+
     # A pending manual "execute predicted trade" request from the dashboard
     # is handled independently of this cycle's automated signal — the user
     # already confirmed direction/entry/stop/target, so it doesn't need (and
@@ -623,7 +691,7 @@ async def run_one_cycle(mcp: CTraderMCPClient, journal: Journal,
             mcp, journal, risk_manager, symbol, manual_side,
             float(manual_request["entry"]), float(manual_request["stop"]),
             float(manual_request["target"]), manual_request.get("reason") or "manual-dashboard",
-            regime, atr_val, settings, symbol_details, dry_run, registry,
+            regime, atr_val, effective_settings, symbol_details, dry_run, registry,
         )
 
     signal = evaluate_bar(
@@ -661,7 +729,7 @@ async def run_one_cycle(mcp: CTraderMCPClient, journal: Journal,
     await _execute_trade(
         mcp, journal, risk_manager, symbol, signal.side, signal.entry_price,
         signal.stop_price, signal.target_price, signal.reason, regime,
-        atr_val, settings, symbol_details, dry_run, registry,
+        atr_val, effective_settings, symbol_details, dry_run, registry,
     )
 
 

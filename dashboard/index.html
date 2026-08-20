@@ -12,7 +12,7 @@
     <header class="annunciator">
       <div class="annunciator__brand">
         <span class="annunciator__title">Cockpit</span>
-        <span class="annunciator__version" id="version">v0.7.4</span>
+        <span class="annunciator__version" id="version">v0.7.5</span>
       </div>
       <div class="annunciator__lights">
         <span class="light" id="light-mcp"><span class="light__dot"></span>MCP LINK</span>
@@ -107,6 +107,37 @@
               </div>
               <svg id="learning-sparkline" class="learning__sparkline" viewBox="0 0 280 40" preserveAspectRatio="none"></svg>
               <p class="learning__caption">Composite score across optimizer/retrain runs — a deterministic statistics engine, not a neural network. See implementationplan.md §11.4.</p>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2 class="panel__title">Position &amp; trailing</h2>
+            <p class="panel__subtitle">trailing-stop trigger/distance + volume sizing — takes effect next cycle, no restart</p>
+            <div class="risk-controls">
+              <label class="auto-controls__row auto-controls__row--checkbox">
+                <input type="checkbox" id="risk-trailing-enabled" />
+                <span>Trailing stop</span>
+              </label>
+              <label class="auto-controls__row">
+                <span>Trigger (pips profit)</span>
+                <input type="number" id="risk-trailing-trigger" min="0" step="0.1" />
+              </label>
+              <label class="auto-controls__row">
+                <span>Distance (pips from entry)</span>
+                <input type="number" id="risk-trailing-distance" min="0" step="0.1" />
+              </label>
+
+              <label class="auto-controls__row auto-controls__row--checkbox">
+                <input type="checkbox" id="risk-margin-sizing" />
+                <span>Size by % of free margin</span>
+              </label>
+              <label class="auto-controls__row">
+                <span>Volume (% of free margin)</span>
+                <input type="number" id="risk-margin-pct" min="0" step="0.1" />
+              </label>
+
+              <button class="chart-btn chart-btn--wide" id="risk-controls-save" type="button">Save</button>
+              <p class="auto-controls__hint" id="risk-controls-hint">Loading current values…</p>
             </div>
           </section>
 
